@@ -21,8 +21,8 @@ class InstrKind(Enum):
 class UnaryOp(Enum):
     NEG = auto()
     NOT = auto()
-    SEQZ = auto()
-    SNEZ = auto()
+    SEQZ = auto()   # set equal zero
+    SNEZ = auto()   # set if not equal zero
 
 
 # Kinds of binary operations.

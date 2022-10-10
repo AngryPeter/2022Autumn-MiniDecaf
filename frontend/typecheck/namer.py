@@ -1,3 +1,4 @@
+from textwrap import indent
 from typing import Protocol, TypeVar, cast
 
 from frontend.ast.node import Node, NullType
@@ -98,13 +99,34 @@ class Namer(Visitor[ScopeStack, None]):
         3. Set the 'symbol' attribute of decl.
         4. If there is an initial value, visit it.
         """
-        pass
+        # TODO: Step5-3 处理声明
+        # ScopeStack.findConflict : 报错 or 定义 VarSymbol 对象
+        symbol = ctx.findConflict(decl.ident.value)
+        if symbol != None:
+            raise DecafGlobalVarDefinedTwiceError(decl.ident.value)
+        # ScopeStack.declare : 加入符号表
+        else:
+            symbol = VarSymbol(decl.ident.value, decl.var_t.type)
+            ctx.declare(symbol)
+            # Declaration.setattr : VarSymbol 存入 AST
+            decl.setattr("symbol", symbol)
+            # 初值表达式
+            if decl.init_expr != NULL:
+                decl.init_expr.accept(self, ctx)
 
     def visitAssignment(self, expr: Assignment, ctx: ScopeStack) -> None:
         """
         1. Refer to the implementation of visitBinary.
         """
-        pass
+        # TODO: step5-2 处理赋值
+        # ScopeStack.lookup 检查左值是否定义
+        symbol = ctx.lookup(expr.lhs.value)
+        if symbol == None:  # 无定义报错
+            raise DecafUndefinedVarError(expr.lhs.value)
+        else:
+            expr.lhs.setattr("symbol", symbol)
+        # 类似 visitBinary
+        expr.rhs.accept(self, ctx)
 
     def visitUnary(self, expr: Unary, ctx: ScopeStack) -> None:
         expr.operand.accept(self, ctx)
@@ -125,7 +147,13 @@ class Namer(Visitor[ScopeStack, None]):
         2. If it has not been declared, raise a DecafUndefinedVarError.
         3. Set the 'symbol' attribute of ident.
         """
-        pass
+        # TODO: step5-1 处理定义
+        # ScopeStack.lookup : 检查是否已定义
+        symbol = ctx.lookup(ident.value)
+        if symbol == None:  # 无定义报错
+            raise DecafUndefinedVarError(ident.value)
+        else:   # 否则设置 symbol 属性
+            ident.setattr("symbol", symbol)
 
     def visitIntLiteral(self, expr: IntLiteral, ctx: ScopeStack) -> None:
         value = expr.value

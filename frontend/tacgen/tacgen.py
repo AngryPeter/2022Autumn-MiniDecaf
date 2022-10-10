@@ -1,3 +1,4 @@
+from webbrowser import get
 import utils.riscv as riscv
 from frontend.ast import node
 from frontend.ast.tree import *
@@ -48,7 +49,8 @@ class TACGen(Visitor[FuncVisitor, None]):
         """
         1. Set the 'val' attribute of ident as the temp variable of the 'symbol' attribute of ident.
         """
-        pass
+        # TODO: step5-4 设置该表达式的返回值 val 为该变量对应符号里的 symbol
+        ident.setattr("val", ident.getattr("symbol").temp)
 
     def visitDeclaration(self, decl: Declaration, mv: FuncVisitor) -> None:
         """
@@ -56,7 +58,15 @@ class TACGen(Visitor[FuncVisitor, None]):
         2. Use mv.freshTemp to get a new temp variable for this symbol.
         3. If the declaration has an initial value, use mv.visitAssignment to set it.
         """
-        pass
+        # TODO: step5-5 生成声明语句的TAC
+        # 使用 getattr 方法获得在符号表构建阶段建立的符号
+        symbol = decl.getattr("symbol")
+        # FuncVisitor.freshTemp 函数获取一个新的临时变量 temp 存储该变量
+        symbol.temp = mv.freshTemp()
+        # 如果有设置初值， visitAssignment 赋值
+        if decl.init_expr != NULL:
+            decl.init_expr.accept(self, mv)
+            mv.visitAssignment(getattr(symbol, "temp"), decl.init_expr.getattr("val"))
 
     def visitAssignment(self, expr: Assignment, mv: FuncVisitor) -> None:
         """
@@ -64,7 +74,14 @@ class TACGen(Visitor[FuncVisitor, None]):
         2. Use mv.visitAssignment to emit an assignment instruction.
         3. Set the 'val' attribute of expr as the value of assignment instruction.
         """
-        pass
+        # TODO: step5-6 设置赋值语句的中间代码（参考 visitBinary 实现）
+        expr.rhs.accept(self, mv)
+        # 使用 temp 添加 TAC 指令，而非 var
+        temp = expr.lhs.getattr("symbol").temp
+        mv.visitAssignment(temp, expr.rhs.getattr("val"))
+        # 设置表达式 val
+        expr.setattr("val", mv.visitAssignment(temp, expr.rhs.getattr("val")))
+
 
     def visitIf(self, stmt: If, mv: FuncVisitor) -> None:
         stmt.cond.accept(self, mv)
@@ -105,20 +122,40 @@ class TACGen(Visitor[FuncVisitor, None]):
         mv.closeLoop()
 
     def visitUnary(self, expr: Unary, mv: FuncVisitor) -> None:
+        # TODO: step2 完成负、反、非运算
         expr.operand.accept(self, mv)
 
         op = {
-            node.UnaryOp.Neg: tacop.UnaryOp.NEG,
+            node.UnaryOp.Neg: tacop.UnaryOp.NEG,        # -
+            node.UnaryOp.BitNot: tacop.UnaryOp.NOT,     # ~
+            node.UnaryOp.LogicNot: tacop.UnaryOp.SEQZ,  # !
             # You can add unary operations here.
         }[expr.op]
         expr.setattr("val", mv.visitUnary(op, expr.operand.getattr("val")))
 
     def visitBinary(self, expr: Binary, mv: FuncVisitor) -> None:
+        # TODO: step3 完成加、减、乘、除、模运算
+        # TODO: step4-1 完成比较、逻辑与或运算
         expr.lhs.accept(self, mv)
         expr.rhs.accept(self, mv)
 
         op = {
-            node.BinaryOp.Add: tacop.BinaryOp.ADD,
+            # 算术运算
+            node.BinaryOp.Add: tacop.BinaryOp.ADD,  # +
+            node.BinaryOp.Sub: tacop.BinaryOp.SUB,  # -
+            node.BinaryOp.Mul: tacop.BinaryOp.MUL,  # *
+            node.BinaryOp.Div: tacop.BinaryOp.DIV,  # /
+            node.BinaryOp.Mod: tacop.BinaryOp.REM,  # %
+            # 比较运算
+            node.BinaryOp.LT: tacop.BinaryOp.SLT,  # <
+            node.BinaryOp.LE: tacop.BinaryOp.LEQ,  # <=
+            node.BinaryOp.GE: tacop.BinaryOp.GEQ,  # >=
+            node.BinaryOp.GT: tacop.BinaryOp.SGT,  # >
+            node.BinaryOp.EQ: tacop.BinaryOp.EQU,  # ==
+            node.BinaryOp.NE: tacop.BinaryOp.NEQ,  # !=
+            # 逻辑运算
+            node.BinaryOp.LogicAnd: tacop.BinaryOp.AND,  # &&
+            node.BinaryOp.LogicOr: tacop.BinaryOp.OR,    # ||
             # You can add binary operations here.
         }[expr.op]
         expr.setattr(

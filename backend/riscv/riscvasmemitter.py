@@ -12,6 +12,7 @@ from utils.tac.tacvisitor import TACVisitor
 from ..subroutineemitter import SubroutineEmitter
 from ..subroutineinfo import SubroutineInfo
 
+from utils.tac import tacop
 """
 RiscvAsmEmitter: an AsmEmitter for RiscV
 """
@@ -77,7 +78,33 @@ class RiscvAsmEmitter(AsmEmitter):
             self.seq.append(Riscv.Unary(instr.op, instr.dst, instr.operand))
  
         def visitBinary(self, instr: Binary) -> None:
-            self.seq.append(Riscv.Binary(instr.op, instr.dst, instr.lhs, instr.rhs))
+            # TODO: step4-2 完成指令翻译，将一个TAC翻译成多个RISCV指令
+            if instr.op == tacop.BinaryOp.EQU:
+                self.seq.append(Riscv.Binary(tacop.BinaryOp.SUB, instr.dst, instr.lhs, instr.rhs))
+                self.seq.append(Riscv.Unary(tacop.UnaryOp.SEQZ, instr.dst, instr.dst))
+            elif instr.op == tacop.BinaryOp.NEQ:
+                self.seq.append(Riscv.Binary(tacop.BinaryOp.SUB, instr.dst, instr.lhs, instr.rhs))
+                self.seq.append(Riscv.Unary(tacop.UnaryOp.SNEZ, instr.dst, instr.dst))
+            elif instr.op == tacop.BinaryOp.GEQ:
+                self.seq.append(Riscv.Binary(tacop.BinaryOp.SLT, instr.dst, instr.lhs, instr.rhs))
+                self.seq.append(Riscv.Unary(tacop.UnaryOp.SEQZ, instr.dst, instr.dst))
+            elif instr.op == tacop.BinaryOp.LEQ:
+                self.seq.append(Riscv.Binary(tacop.BinaryOp.SGT, instr.dst, instr.lhs, instr.rhs))
+                self.seq.append(Riscv.Unary(tacop.UnaryOp.SEQZ, instr.dst, instr.dst))
+            elif instr.op == tacop.BinaryOp.AND:
+                self.seq.append(Riscv.Unary(tacop.UnaryOp.SNEZ, instr.dst, instr.lhs))
+                self.seq.append(Riscv.Binary(tacop.BinaryOp.SUB, instr.dst, Riscv.ZERO, instr.dst))
+                self.seq.append(Riscv.Binary(tacop.BinaryOp.AND, instr.dst, instr.dst, instr.rhs))
+                self.seq.append(Riscv.Unary(tacop.UnaryOp.SNEZ, instr.dst, instr.dst))
+            elif instr.op == tacop.BinaryOp.OR:
+                self.seq.append(Riscv.Binary(tacop.BinaryOp.OR, instr.dst, instr.lhs, instr.rhs))
+                self.seq.append(Riscv.Unary(tacop.UnaryOp.SNEZ, instr.dst, instr.dst))
+            else:
+                self.seq.append(Riscv.Binary(instr.op, instr.dst, instr.lhs, instr.rhs))
+
+        def visitAssign(self, instr: Assign) -> None:
+            # TODO: step5-7 为 TAC 中的 Assign 指令提供汇编指令选择
+            self.seq.append(Riscv.Move(instr.dst, instr.src))
 
         def visitCondBranch(self, instr: CondBranch) -> None:
             self.seq.append(Riscv.Branch(instr.cond, instr.label))
