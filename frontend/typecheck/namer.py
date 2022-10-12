@@ -139,7 +139,10 @@ class Namer(Visitor[ScopeStack, None]):
         """
         1. Refer to the implementation of visitBinary.
         """
-        pass
+        # TODO: Step6-1 仿照 visitIf 实现
+        expr.cond.accept(self, ctx)
+        expr.then.accept(self, ctx)
+        expr.otherwise.accept(self, ctx)
 
     def visitIdentifier(self, ident: Identifier, ctx: ScopeStack) -> None:
         """

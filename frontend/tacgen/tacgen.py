@@ -82,7 +82,6 @@ class TACGen(Visitor[FuncVisitor, None]):
         # 设置表达式 val
         expr.setattr("val", mv.visitAssignment(temp, expr.rhs.getattr("val")))
 
-
     def visitIf(self, stmt: If, mv: FuncVisitor) -> None:
         stmt.cond.accept(self, mv)
 
@@ -166,7 +165,26 @@ class TACGen(Visitor[FuncVisitor, None]):
         """
         1. Refer to the implementation of visitIf and visitBinary.
         """
-        pass
-
+        # TODO: Step6-2 仿照 visitIf 实现
+        expr.cond.accept(self, mv)
+        skipLabel = mv.freshLabel()
+        exitLabel = mv.freshLabel()
+        # 临时变量存储表达式的值
+        temp = mv.freshTemp()
+        mv.visitCondBranch(
+            tacop.CondBranchOp.BEQ, expr.cond.getattr("val"), skipLabel
+        )
+        expr.then.accept(self, mv)
+        # 临时变量存储 then 表达式的值
+        mv.visitAssignment(temp, expr.then.getattr("val"))
+        mv.visitBranch(exitLabel)
+        mv.visitLabel(skipLabel)
+        expr.otherwise.accept(self, mv)
+        # 临时变量存储 otherwise 表达式的值
+        mv.visitAssignment(temp, expr.otherwise.getattr("val"))
+        mv.visitLabel(exitLabel)
+        # 完成条件表达式后应进行赋值
+        expr.setattr("val", temp)
+        
     def visitIntLiteral(self, expr: IntLiteral, mv: FuncVisitor) -> None:
         expr.setattr("val", mv.visitLoad(expr.value))
