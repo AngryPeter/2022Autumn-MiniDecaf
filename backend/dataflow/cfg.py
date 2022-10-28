@@ -1,3 +1,4 @@
+from xmlrpc.client import Boolean
 from backend.dataflow.basicblock import BasicBlock
 
 """
@@ -40,3 +41,13 @@ class CFG:
 
     def iterator(self):
         return iter(self.nodes)
+
+    def unreachable(self, id) -> Boolean:
+        # TODO: Step7-2 判断某个基本块是否可达
+        # 已经获得了完整的图，只需要判断有无前驱
+        if id == 0:
+            return False
+        if self.getPrev(id) == set():
+            # 没有前驱
+            return True
+        return False

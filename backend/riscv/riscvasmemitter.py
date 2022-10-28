@@ -59,6 +59,7 @@ class RiscvAsmEmitter(AsmEmitter):
         def __init__(self, entry: Label) -> None:
             self.entry = entry
             self.seq = []
+            self.params = 0
 
         # in step11, you need to think about how to deal with globalTemp in almost all the visit functions. 
         def visitReturn(self, instr: Return) -> None:
@@ -113,6 +114,27 @@ class RiscvAsmEmitter(AsmEmitter):
             self.seq.append(Riscv.Jump(instr.target))
 
         # in step9, you need to think about how to pass the parameters and how to store and restore callerSave regs
+        # TODO: Step9-13 新增 visitParam 和 visitDirectCall 函数
+        def visitParam(self, instr: Param) -> None:
+            """新增 visitParam: 用于保存函数调用的参数（可以保存在栈上或者函数调用寄存器里）"""
+            self.seq.append(Riscv.NativeStoreWord(instr.param, Riscv.SP, 0))
+            self.seq.append(Riscv.SPAdd(-4))
+
+        def visitCall(self, instr: Call) -> None:
+            """visitDirectCall: 调用函数（函数调用前后 caller-save 寄存器的保存和恢复，
+               函数调用以及对函数返回值的处理）。"""
+            self.seq.append(Riscv.NativeStoreWord(Riscv.RA, Riscv.SP, 0))
+            self.seq.append(Riscv.NativeStoreWord(Riscv.FP, Riscv.SP, -4))
+            self.seq.append(Riscv.Move(Riscv.FP, Riscv.SP))
+            self.seq.append(Riscv.SPAdd(-8))
+            self.seq.append(Riscv.Jump(instr.func))
+            self.params = 0
+        
+        def visitGetParam(self, instr: GetParam) -> None:
+            """参数出栈"""
+            # self.seq.append(Riscv.NativeLoadWord(instr.param, Riscv.FP, self.params * 4))
+            self.params += 1
+            
         # in step11, you need to think about how to store the array 
 """
 RiscvAsmEmitter: an SubroutineEmitter for RiscV
@@ -133,6 +155,13 @@ class RiscvSubroutineEmitter(SubroutineEmitter):
         self.offsets = {}
 
         self.printer.printLabel(info.funcLabel)
+
+        # TODO: Step9-14 处理参数和栈的相关行为
+        """处理把 Temp 保存到栈上和从栈上把 Temp 读出来的操作。
+        （参数在栈上特定的区域）需要处理好 ra 寄存器的保存以及 callee-save 寄存器的保存和恢复。
+        可以考虑把所有参数存栈上。需要设计好参数在栈上的布局。
+        函数调用前后 caller-save 寄存器的保存和恢复可以考虑通过添加新的伪指令，
+        在寄存器分配阶段实现保存和恢复。"""
 
         # in step9, step11 you can compute the offset of local array and parameters here
 

@@ -11,16 +11,22 @@ Refer to https://www.dabeaz.com/ply/ply.html for more details.
 """
 
 # Reserved keywords
+# TODO: Step8-5 添加保留字
 reserved = {
     "return": "Return",
     "int": "Int",
     "if": "If",
     "else": "Else",
     "while": "While",
+    "for": "For",
+    "do": "Do",
+    "continue": "Continue",
     "break": "Break",
 }
 
 t_Semi = ";"
+# TODO: Step9-15 添加逗号
+t_Comma = ","
 
 t_LParen = "("
 t_RParen = ")"

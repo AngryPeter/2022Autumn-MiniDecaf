@@ -39,11 +39,21 @@ def p_empty(p: yacc.YaccProduction):
     pass
 
 
+# 修改 program 文法
 def p_program(p):
     """
-    program : function
+    program : program function
     """
-    p[0] = Program(p[1])
+    if p[2] is not NULL:
+        p[1].children.append(p[2])
+    p[0] = p[1]
+
+
+def p_functions(p):
+    """
+    program : empty
+    """
+    p[0] = Program()
 
 
 def p_type(p):
@@ -53,11 +63,52 @@ def p_type(p):
     p[0] = TInt()
 
 
+# TODO: Step9-5 修改、增加 function、parameter、call 等相关文法
+# def p_function_def_empty(p):
+#     """
+#     function : type Identifier LParen RParen LBrace block RBrace
+#     """
+#     p[0] = Function(p[1], p[2], p[6], NULL)
+
+
+# params 可以为 empty
 def p_function_def(p):
     """
-    function : type Identifier LParen RParen LBrace block RBrace
+    function : type Identifier LParen params RParen LBrace block RBrace
     """
-    p[0] = Function(p[1], p[2], p[6])
+    p[0] = Function(p[1], p[2], p[7], p[4])
+
+
+# 参考 block 的文法实现
+# 无参数
+def p_params_empty(p):
+    """
+    params : empty
+    """
+    p[0] = ParameterList()
+
+
+def p_params(p):
+    """
+    params : params param_item
+    """
+    if p[2] is not NULL:
+        p[1].children.append(p[2])
+    p[0] = p[1]
+
+
+def p_first_param_item(p):
+    """
+    param_item : declaration
+    """
+    p[0] = p[1]
+
+
+def p_param_item(p):
+    """
+    param_item : Comma declaration
+    """
+    p[0] = p[2]
 
 
 def p_block(p):
@@ -115,6 +166,87 @@ def p_while(p):
     p[0] = While(p[3], p[5])
 
 
+# TODO: Step8-6 新增相关文法
+def p_for(p):
+    """
+    statement_matched : For LParen expression Semi expression Semi expression RParen statement_matched
+        | For LParen declaration Semi expression Semi expression RParen statement_matched
+    statement_unmatched : For LParen expression Semi expression Semi expression RParen statement_unmatched
+        | For LParen declaration Semi expression Semi expression RParen statement_unmatched
+    """
+    p[0] = For(p[9], p[3], p[5], p[7])
+
+
+def p_for_noinit(p):
+    """
+    statement_matched : For LParen Semi expression Semi expression RParen statement_matched
+    statement_unmatched : For LParen Semi expression Semi expression RParen statement_unmatched
+    """
+    p[0] = For(p[8], NULL, p[4], p[6])
+
+
+def p_for_nocond(p):
+    """
+    statement_matched : For LParen expression Semi Semi expression RParen statement_matched
+        | For LParen declaration Semi Semi expression RParen statement_matched
+    statement_unmatched : For LParen expression Semi Semi expression RParen statement_unmatched
+        | For LParen declaration Semi Semi expression RParen statement_unmatched
+    """
+    p[0] = For(p[8], p[3], NULL, p[6])
+
+
+def p_for_noupdate(p):
+    """
+    statement_matched : For LParen expression Semi expression Semi RParen statement_matched
+        | For LParen declaration Semi expression Semi RParen statement_matched
+    statement_unmatched : For LParen expression Semi expression Semi RParen statement_unmatched
+        | For LParen declaration Semi expression Semi RParen statement_unmatched
+    """
+    p[0] = For(p[8], p[3], p[5], NULL)
+
+
+def p_for_onlyinit(p):
+    """
+    statement_matched : For LParen expression Semi Semi RParen statement_matched
+        | For LParen declaration Semi Semi RParen statement_matched
+    statement_unmatched : For LParen expression Semi Semi RParen statement_unmatched
+        | For LParen declaration Semi Semi RParen statement_unmatched
+    """
+    p[0] = For(p[7], p[3], NULL, NULL)
+
+
+def p_for_onlycond(p):
+    """
+    statement_matched : For LParen Semi expression Semi RParen statement_matched
+    statement_unmatched : For LParen Semi expression Semi RParen statement_unmatched
+    """
+    p[0] = For(p[7], NULL, p[4], NULL)
+
+
+def p_for_onlyupdate(p):
+    """
+    statement_matched : For LParen Semi Semi expression RParen statement_matched
+    statement_unmatched : For LParen Semi Semi expression RParen statement_unmatched
+    """
+    p[0] = For(p[7], NULL, NULL, p[5])
+
+
+def p_for_empty(p):
+    """
+    statement_matched : For LParen Semi Semi RParen statement_matched
+    statement_unmatched : For LParen Semi Semi RParen statement_unmatched
+    """
+    p[0] = For(p[6], NULL, NULL, NULL)
+
+
+def p_dowhile(p):
+    """
+    statement_matched : Do statement_matched While LParen expression RParen Semi
+    statement_unmatched : Do statement_unmatched While LParen expression RParen Semi
+    """
+    p[0] = DoWhile(p[2], p[5])
+
+
 def p_return(p):
     """
     statement_matched : Return expression Semi
@@ -141,6 +273,13 @@ def p_break(p):
     statement_matched : Break Semi
     """
     p[0] = Break()
+
+
+def p_continue(p):
+    """
+    statement_matched : Continue Semi
+    """
+    p[0] = Continue()
 
 
 def p_opt_expression(p):
@@ -198,6 +337,44 @@ def p_unary_expression(p):
         | Not unary
     """
     unary(p)
+
+
+def p_postfix(p):
+    """
+    postfix : Identifier LParen arguments RParen
+    """
+    p[0] = Call(p[1], p[3])
+
+
+# 无参数
+def p_arguments_empty(p):
+    """
+    arguments : empty
+    """
+    p[0] = ExpressionList()
+
+
+def p_arguments(p):
+    """
+    arguments : arguments argument_item
+    """
+    if p[2] is not NULL:
+        p[1].children.append(p[2])
+    p[0] = p[1]
+
+
+def p_argument_item(p):
+    """
+    argument_item : Comma expression
+    """
+    p[0] = p[2]
+
+
+def p_first_argument_item(p):
+    """
+    argument_item : expression
+    """
+    p[0] = p[1]
 
 
 def p_binary_expression(p):

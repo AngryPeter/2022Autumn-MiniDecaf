@@ -70,27 +70,30 @@ class Function(Node):
     """
     AST node that represents a function.
     """
-
+    # TODO: Step9-1 修改 Function 节点，添加参数列表
     def __init__(
         self,
         ret_t: TypeLiteral,
         ident: Identifier,
         body: Block,
+        params: Optional[ParameterList] = None
     ) -> None:
         super().__init__("function")
         self.ret_t = ret_t
         self.ident = ident
         self.body = body
+        self.params = params or NULL
 
     def __getitem__(self, key: int) -> Node:
         return (
             self.ret_t,
             self.ident,
             self.body,
+            self.params
         )[key]
 
     def __len__(self) -> int:
-        return 3
+        return 4
 
     def accept(self, v: Visitor[T, U], ctx: T):
         return v.visitFunction(self, ctx)
@@ -172,6 +175,54 @@ class While(Statement):
         return v.visitWhile(self, ctx)
 
 
+class For(Statement):
+    # TODO: Step8-1 新增 For 节点
+    """
+    AST node of for statement.
+    """
+
+    def __init__(
+        self, body: Statement, 
+        init: Optional[Union[Expression, Declaration]] = None, 
+        cond: Optional[Expression] = None, 
+        update: Optional[Expression] = None) -> None:
+        super().__init__("for")
+        self.init = init or NULL
+        self.cond = cond or NULL
+        self.update = update or NULL
+        self.body = body
+
+    def __getitem__(self, key: int) -> Node:
+        return (self.init, self.cond, self.update, self.body)[key]
+
+    def __len__(self) -> int:
+        return 4
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitFor(self, ctx)
+
+
+class DoWhile(Statement):
+    # TODO: Step8-2 新增 DoWhile 节点
+    """
+    AST node of do-while statement.
+    """
+
+    def __init__(self, body: Statement, cond: Expression) -> None:
+        super().__init__("dowhile")
+        self.cond = cond
+        self.body = body
+
+    def __getitem__(self, key: int) -> Node:
+        return (self.body, self.cond)[key]
+
+    def __len__(self) -> int:
+        return 2
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitDoWhile(self, ctx)
+
+
 class Break(Statement):
     """
     AST node of break statement.
@@ -188,6 +239,28 @@ class Break(Statement):
 
     def accept(self, v: Visitor[T, U], ctx: T):
         return v.visitBreak(self, ctx)
+
+    def is_leaf(self):
+        return True
+
+
+class Continue(Statement):
+    # TODO: Step8-3 新增 Continue 节点
+    """
+    AST node of continue statement.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("continue")
+
+    def __getitem__(self, key: int) -> Node:
+        raise _index_len_err(key, self)
+
+    def __len__(self) -> int:
+        return 0
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitContinue(self, ctx)
 
     def is_leaf(self):
         return True
@@ -425,3 +498,51 @@ class TInt(TypeLiteral):
 
     def accept(self, v: Visitor[T, U], ctx: T):
         return v.visitTInt(self, ctx)
+
+
+class ParameterList(ListNode[Declaration]):
+    """
+    AST node that represents a list of parameters.
+    """
+    # TODO: Step9-2-1 新增参数节点
+    def __init__(self, *children: Declaration) -> None:
+        super().__init__("params", list(children))
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitParameterList(self, ctx)
+
+
+class ExpressionList(ListNode[Expression]):
+    """
+    AST node that represents a list of parameters.
+    """
+    # TODO: Step9-2-2 新增参数节点
+    def __init__(self, *children: Expression) -> None:
+        super().__init__("arguments", list(children))
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitExpressionList(self, ctx)
+
+
+class Call(Node):
+    """
+    AST node that represents calling a function.
+    """
+    # TODO: Step9-3 新增参数节点
+    def __init__(
+        self,
+        ident: Identifier,
+        arguments: Optional[ExpressionList] = None,
+    ) -> None:
+        super().__init__("call")
+        self.ident = ident
+        self.arguments = arguments or NULL
+
+    def __getitem__(self, key: int) -> Node:
+        return (self.ident, self.arguments)[key]
+
+    def __len__(self) -> int:
+        return 2
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitCall(self, ctx)

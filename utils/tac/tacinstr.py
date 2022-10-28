@@ -202,3 +202,43 @@ class Mark(TACInstr):
 
     def accept(self, v: TACVisitor) -> None:
         v.visitMark(self)
+
+
+# TODO: Step9-9 新增 PARAM / CALL 指令
+# 设置函数调用参数
+class Param(TACInstr):
+    def __init__(self, param: Temp) -> None:
+        super().__init__(InstrKind.SEQ, [], [param], None)
+        self.param = param
+
+    def __str__(self) -> str:
+        return "PARAM %s" % self.param
+
+    def accept(self, v: TACVisitor) -> None:
+        v.visitParam(self)
+
+
+class GetParam(TACInstr):
+    def __init__(self, param: Temp) -> None:
+        super().__init__(InstrKind.SEQ, [param], [], None)
+        self.param = param
+
+    def __str__(self) -> str:
+        return "GETPARAM %s" % self.param
+
+    def accept(self, v: TACVisitor) -> None:
+        v.visitGetParam(self)
+
+
+# 调用函数
+class Call(TACInstr):
+    def __init__(self, dst: Temp, func: Label) -> None:
+        super().__init__(InstrKind.JMP, [dst], [], None)
+        self.dst = dst      # 函数返回值
+        self.func = func    # 函数入口地址
+
+    def __str__(self) -> str:
+        return "%s = CALL %s" % (self.dst, self.func)
+
+    def accept(self, v: TACVisitor) -> None:
+        v.visitCall(self)

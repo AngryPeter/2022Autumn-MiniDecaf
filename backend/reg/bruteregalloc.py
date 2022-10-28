@@ -38,8 +38,11 @@ class BruteRegAlloc(RegAlloc):
     def accept(self, graph: CFG, info: SubroutineInfo) -> None:
         subEmitter = self.emitter.emitSubroutine(info)
         for bb in graph.iterator():
+            # TODO: Step7-3 跳过不可达基本块
             # you need to think more here
             # maybe we don't need to alloc regs for all the basic blocks
+            if graph.unreachable(bb.id):
+                continue
             if bb.label is not None:
                 subEmitter.emitLabel(bb.label)
             self.localAlloc(bb, subEmitter)

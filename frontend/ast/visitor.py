@@ -34,6 +34,19 @@ class Visitor(Protocol[T, U]):  # type: ignore
     def visitFunction(self, that: Function, ctx: T) -> Optional[U]:
         return self.visitOther(that, ctx)
 
+    # TODO: Step9-4 新增 Parameter 和 Call 的 Visit 函数
+    def visitParameterList(self, that: ParameterList, ctx: T) -> Optional[Sequence[Optional[U]]]:
+        return self.visitOther(that, ctx)
+
+    def visitExpressionList(self, that: ExpressionList, ctx: T) -> Optional[Sequence[Optional[U]]]:
+        return self.visitOther(that, ctx)
+    
+    def visitCall(self, that: Call, ctx: T) -> Optional[U]:
+        return self.visitOther(that, ctx)
+
+    def visitCall(self, that: For, ctx: T) -> Optional[U]:
+        return self.visitOther(that, ctx)
+
     def visitIf(self, that: If, ctx: T) -> Optional[U]:
         return self.visitOther(that, ctx)
 
@@ -41,6 +54,16 @@ class Visitor(Protocol[T, U]):  # type: ignore
         return self.visitOther(that, ctx)
 
     def visitWhile(self, that: While, ctx: T) -> Optional[U]:
+        return self.visitOther(that, ctx)
+    
+    # TODO: Step8-4 新增循环默认 Visitor 函数
+    def visitFor(self, that: For, ctx: T) -> Optional[U]:
+        return self.visitOther(that, ctx)
+
+    def visitDoWhile(self, that: DoWhile, ctx: T) -> Optional[U]:
+        return self.visitOther(that, ctx)
+
+    def visitContinue(self, that: Continue, ctx: T) -> Optional[U]:
         return self.visitOther(that, ctx)
 
     def visitBreak(self, that: Break, ctx: T) -> Optional[U]:

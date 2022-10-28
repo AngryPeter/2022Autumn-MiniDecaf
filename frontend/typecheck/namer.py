@@ -37,15 +37,73 @@ class Namer(Visitor[ScopeStack, None]):
         # Check if the 'main' function is missing
         if not program.hasMainFunc():
             raise DecafNoMainFuncError
-
-        program.mainFunc().accept(self, ctx)
-
+        # TODO: Step9-6 依次遍历所有函数
+        for function in program.children:
+            function.accept(self, ctx)
+            # program.mainFunc().accept(self, ctx)
+        
     def visitFunction(self, func: Function, ctx: ScopeStack) -> None:
-        func.body.accept(self, ctx)
+        # TODO: Step9-7 新建符号表
+        """首先需要新建一个函数符号 FuncSymbol, Scope(ScopeKind.LOCAL)函数作用域，
+        这个作用域既包括函数体内部的变量，也包括函数的所有参数。
+        因此，在访问函数体之前，需要先扫描参数列表，
+        新增 visitParameter 函数为所有参数建立符号，并存入符号表"""
+        symbol = ctx.findConflict(func.ident.value)
+        if symbol != None:
+            raise DecafGlobalVarDefinedTwiceError(func.ident.value)
+        else:
+            symbol = FuncSymbol(func.ident.value, func.ret_t.type, ctx.globalscope)
+            # 函数名加入全局符号表
+            ctx.globalscope.declare(symbol)
+            func.setattr("symbol", symbol)
+            localScope = Scope(ScopeKind.LOCAL)
+            ctx.open(localScope)
+            if not func.params is NULL:
+                # 添加参数类型
+                for param in func.params:
+                    symbol.addParaType(param.var_t)
+                    # 将参数添加到局部作用域
+                func.params.accept(self, ctx)
+            func.body.accept(self, ctx)
+            ctx.close()
 
+    def visitParameterList(self, params:ParameterList, ctx: ScopeStack) -> None:
+        for child in params:
+            child.accept(self, ctx)
+    
+    def visitExpressionList(self, arguments:ExpressionList, ctx: ScopeStack) -> None:
+        for child in arguments:
+            child.accept(self, ctx)
+
+    def visitCall(self, call: Call, ctx: ScopeStack) -> None:
+        # TODO: Step9-8 通过类似 Expression 的方式进行语义检查
+        """函数调用除了检查参数是否合法，调用函数是否经过定义之外，
+        还要在类型检查(Typer)中检查函数参数和定义是否一致。"""
+        symbol = ctx.lookup(call.ident.value)
+        if symbol == None:  # 无定义报错
+            raise DecafUndefinedFuncError(call.ident.value)
+        else:
+            if len(call.arguments.children) != symbol.parameterNum:
+                # 参数数目不一致
+                raise DecafBadFuncCallError(call.ident.value)
+
+            # print(symbol.parameterNum)
+            # for i in range(symbol.parameterNum):
+            #     # 检查类型
+            #     print(call.arguments.children[i])
+            #     if call.arguments.children[i].type != symbol.getParaType(i):
+            #         print(call.arguments.children[i].type)
+            #         print(symbol.getParaType(i))
+            #         raise DecafBadFuncCallError(call.ident.value)
+            call.arguments.accept(self, ctx)
+            
     def visitBlock(self, block: Block, ctx: ScopeStack) -> None:
+        # TODO: Step7-1 设置局部作用域
+        localScope = Scope(ScopeKind.LOCAL)
+        ctx.open(localScope)
         for child in block:
             child.accept(self, ctx)
+        ctx.close()
 
     def visitReturn(self, stmt: Return, ctx: ScopeStack) -> None:
         stmt.expr.accept(self, ctx)
@@ -74,23 +132,45 @@ class Namer(Visitor[ScopeStack, None]):
         stmt.body.accept(self, ctx)
         ctx.closeLoop()
 
+    # TODO: Step8-7 新增循环相关符号表遍历函数
+    def visitDoWhile(self, stmt: While, ctx: ScopeStack) -> None:
         """
-        def visitDoWhile(self, stmt: DoWhile, ctx: ScopeStack) -> None:
-
         1. Open a loop in ctx (for validity checking of break/continue)
         2. Visit body of the loop.
         3. Close the loop.
         4. Visit the condition of the loop.
         """
+        stmt.body.accept(self, ctx)
+        ctx.openLoop()
+        ctx.closeLoop()
+        stmt.cond.accept(self, ctx)
+
+    def visitFor(self, stmt: For, ctx: ScopeStack) -> None:
+        # for 循环需要自带一个作用域
+        # 要模仿 visitBlock 函数，打开/关闭对应的局部作用域 "Scope(ScopeKind.LOCAL)"。
+        localScope = Scope(ScopeKind.LOCAL)
+        ctx.open(localScope)
+        if not stmt.init is NULL:
+            stmt.init.accept(self, ctx)
+        if not stmt.cond is NULL:
+            stmt.cond.accept(self, ctx)
+        ctx.openLoop()
+        stmt.body.accept(self, ctx)
+        if not stmt.update is NULL:
+            stmt.update.accept(self, ctx)
+        ctx.closeLoop()
+        ctx.close()
+
+    def visitContinue(self, stmt: Continue, ctx: ScopeStack) -> None:
+        """
+        1. Refer to the implementation of visitBreak.
+        """
+        if not ctx.inLoop():
+            raise DecafContinueOutsideLoopError()    
 
     def visitBreak(self, stmt: Break, ctx: ScopeStack) -> None:
         if not ctx.inLoop():
             raise DecafBreakOutsideLoopError()
-
-        # def visitContinue(self, stmt: Continue, ctx: ScopeStack) -> None:
-        """
-        1. Refer to the implementation of visitBreak.
-        """
 
     def visitDeclaration(self, decl: Declaration, ctx: ScopeStack) -> None:
         """

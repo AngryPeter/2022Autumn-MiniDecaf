@@ -1,3 +1,4 @@
+from unittest import case
 from webbrowser import get
 import utils.riscv as riscv
 from frontend.ast import node
@@ -22,17 +23,48 @@ class TACGen(Visitor[FuncVisitor, None]):
 
     # Entry of this phase
     def transform(self, program: Program) -> TACProg:
-        mainFunc = program.mainFunc()
-        pw = ProgramWriter(["main"])
-        # The function visitor of 'main' is special.
-        mv = pw.visitMainFunc()
+        # TODO: Step9-11 为每个函数体进行 TAC 生成
+        # mainFunc = program.mainFunc()
+        # pw = ProgramWriter(["main"])
+        # # The function visitor of 'main' is special.
+        # mv = pw.visitMainFunc()
 
-        mainFunc.body.accept(self, mv)
-        # Remember to call mv.visitEnd after the translation a function.
-        mv.visitEnd()
+        # mainFunc.body.accept(self, mv)
+        # # Remember to call mv.visitEnd after the translation a function.
+        # mv.visitEnd()
 
-        # Remember to call pw.visitEnd before finishing the translation phase.
+        # # Remember to call pw.visitEnd before finishing the translation phase.
+        # return pw.visitEnd()
+        functions = program.functions()
+        func_idents = [func for func in functions.keys()]
+        pw = ProgramWriter(func_idents)
+        nextTempId = 0
+        for func_ident in func_idents:
+            if func_ident == 'main':
+                mv = pw.visitMainFunc()
+                mv.nextTempId = nextTempId
+                functions[func_ident].body.accept(self, mv)
+                mv.visitEnd()
+            else:
+                paramLen = functions[func_ident].params.__len__
+                fv = pw.visitFunc(func_ident, paramLen)
+                fv.nextTempId = nextTempId
+                for param in functions[func_ident].params:
+                    param.accept(self, fv)
+                    fv.visitGetParam(param.getattr("symbol").temp)
+                functions[func_ident].body.accept(self, fv)
+                fv.visitEnd()
+                nextTempId = fv.nextTempId
         return pw.visitEnd()
+    
+    # TODO: Step9-12 新增visitCall函数
+    def visitCall(self, call: Call, mv: FuncVisitor) -> None:
+        """依次访问所有调用参数, 并将它们的返回值(getattr("val"))依次执行 PARAM 指令，
+        然后执行 CALL 指令, 并新建临时变量为函数设置返回值。"""
+        for arg in call.arguments.children[::-1]:
+            arg.accept(self, mv)
+            mv.visitParam(arg.getattr("val"))
+        call.setattr("val", mv.visitCall(mv.ctx.getFuncLabel(call.ident.value)))
 
     def visitBlock(self, block: Block, mv: FuncVisitor) -> None:
         for child in block:
@@ -80,7 +112,7 @@ class TACGen(Visitor[FuncVisitor, None]):
         temp = expr.lhs.getattr("symbol").temp
         mv.visitAssignment(temp, expr.rhs.getattr("val"))
         # 设置表达式 val
-        expr.setattr("val", mv.visitAssignment(temp, expr.rhs.getattr("val")))
+        expr.setattr("val", temp)
 
     def visitIf(self, stmt: If, mv: FuncVisitor) -> None:
         stmt.cond.accept(self, mv)
@@ -119,6 +151,56 @@ class TACGen(Visitor[FuncVisitor, None]):
         mv.visitBranch(beginLabel)
         mv.visitLabel(breakLabel)
         mv.closeLoop()
+    
+    # TODO: Step8-8 新增循环 TAC 生成
+    def visitDoWhile(self, stmt: While, mv: FuncVisitor) -> None:
+        beginLabel = mv.freshLabel()
+        loopLabel = mv.freshLabel()
+        breakLabel = mv.freshLabel()
+        # 压栈
+        mv.openLoop(breakLabel, loopLabel)
+        # begin label
+        mv.visitLabel(beginLabel)
+        stmt.body.accept(self, mv)
+        # loop label
+        mv.visitLabel(loopLabel)
+        stmt.cond.accept(self, mv)
+        mv.visitCondBranch(tacop.CondBranchOp.BEQ, stmt.cond.getattr("val"), breakLabel)
+        mv.visitBranch(beginLabel)
+        # break label
+        mv.visitLabel(breakLabel)
+        mv.closeLoop()
+
+    def visitFor(self, stmt: For, mv: FuncVisitor) -> None:
+        # print(stmt)
+        beginLabel = mv.freshLabel()
+        loopLabel = mv.freshLabel()
+        breakLabel = mv.freshLabel()
+        mv.openLoop(breakLabel, loopLabel)
+        # init
+        if stmt.init is not NULL:
+            stmt.init.accept(self, mv)
+        # begin label
+        mv.visitLabel(beginLabel)
+        # condition
+        if stmt.cond is not NULL:
+            stmt.cond.accept(self, mv)
+            mv.visitCondBranch(tacop.CondBranchOp.BEQ, stmt.cond.getattr("val"), breakLabel)
+        # body
+        stmt.body.accept(self, mv)
+        # loop label
+        mv.visitLabel(loopLabel)
+        # update
+        if not stmt.update is NULL:
+            stmt.update.accept(self, mv)
+        # j begin label
+        mv.visitBranch(beginLabel)
+        # break label
+        mv.visitLabel(breakLabel)
+        mv.closeLoop()
+    
+    def visitContinue(self, stmt: Break, mv: FuncVisitor) -> None:
+        mv.visitBranch(mv.getContinueLabel())
 
     def visitUnary(self, expr: Unary, mv: FuncVisitor) -> None:
         # TODO: step2 完成负、反、非运算

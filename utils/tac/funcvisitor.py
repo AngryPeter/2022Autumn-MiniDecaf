@@ -106,3 +106,15 @@ class FuncVisitor:
     # To get the label for 'continue' in the current loop.
     def getContinueLabel(self) -> Label:
         return self.continueLabelStack[-1]
+
+    # TODO: Step9-10 为 PARAM 和 CALL 新增相应的 visit 函数
+    def visitParam(self, param: Temp) -> None:
+        self.func.add(Param(param))
+
+    def visitGetParam(self, param: Temp) -> None:
+        self.func.add(GetParam(param))
+
+    def visitCall(self, func: Label) -> None:
+        temp = self.freshTemp()
+        self.func.add(Call(temp, func))
+        return temp
