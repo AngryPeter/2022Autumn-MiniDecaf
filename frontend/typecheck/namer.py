@@ -49,10 +49,11 @@ class Namer(Visitor[ScopeStack, None]):
         因此，在访问函数体之前，需要先扫描参数列表，
         新增 visitParameter 函数为所有参数建立符号，并存入符号表"""
         symbol = ctx.findConflict(func.ident.value)
-        if symbol != None:
-            raise DecafGlobalVarDefinedTwiceError(func.ident.value)
-        else:
-            symbol = FuncSymbol(func.ident.value, func.ret_t.type, ctx.globalscope)
+        if symbol == None:
+            if func.body is NULL:
+                symbol = FuncSymbol(func.ident.value, func.ret_t.type, ctx.globalscope, False)
+            else:
+                symbol = FuncSymbol(func.ident.value, func.ret_t.type, ctx.globalscope, True)
             # 函数名加入全局符号表
             ctx.globalscope.declare(symbol)
             func.setattr("symbol", symbol)
@@ -64,8 +65,31 @@ class Namer(Visitor[ScopeStack, None]):
                     symbol.addParaType(param.var_t)
                     # 将参数添加到局部作用域
                 func.params.accept(self, ctx)
-            func.body.accept(self, ctx)
+            if not func.body is NULL:
+                # 定义函数
+                func.body.accept(self, ctx)
             ctx.close()
+        else:
+            # 重复声明，要求类型一致
+            if func.body is NULL and func.ret_t == symbol.type:
+                pass
+            elif not func.body is NULL: # 定义函数
+                if symbol.definition:   # 已经定义
+                    raise DecafGlobalVarDefinedTwiceError(func.ident.value)
+                else:
+                    localScope = Scope(ScopeKind.LOCAL)
+                    ctx.open(localScope)
+                    if not func.params is NULL:
+                        # 添加参数类型
+                        for param in func.params:
+                            symbol.addParaType(param.var_t)
+                            # 将参数添加到局部作用域
+                        func.params.accept(self, ctx)
+                    # 定义函数
+                    func.body.accept(self, ctx)
+                    symbol.definition = True
+                    ctx.close()
+
 
     def visitParameterList(self, params:ParameterList, ctx: ScopeStack) -> None:
         for child in params:
@@ -86,15 +110,14 @@ class Namer(Visitor[ScopeStack, None]):
             if len(call.arguments.children) != symbol.parameterNum:
                 # 参数数目不一致
                 raise DecafBadFuncCallError(call.ident.value)
-
             # print(symbol.parameterNum)
-            # for i in range(symbol.parameterNum):
-            #     # 检查类型
-            #     print(call.arguments.children[i])
-            #     if call.arguments.children[i].type != symbol.getParaType(i):
+            # else:
+            #     for i in range(symbol.parameterNum):
+            #         # 检查类型
             #         print(call.arguments.children[i].type)
             #         print(symbol.getParaType(i))
-            #         raise DecafBadFuncCallError(call.ident.value)
+            #         if call.arguments.children[i].type != symbol.getParaType(i):
+            #             raise DecafBadFuncCallError(call.ident.value)
             call.arguments.accept(self, ctx)
             
     def visitBlock(self, block: Block, ctx: ScopeStack) -> None:

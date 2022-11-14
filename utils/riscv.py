@@ -136,6 +136,14 @@ class Riscv:
         
         def __str__(self) -> str:
             return "j " + str(self.target)
+    
+    class Param(TACInstr):
+        def __init__(self, src: Temp, num: int) -> None:
+            super().__init__(InstrKind.SEQ, [], [src], None)
+            self.param_num = num
+
+        def __str__(self) -> str:
+            return ""
 
     class SPAdd(NativeInstr):
         def __init__(self, offset: int) -> None:

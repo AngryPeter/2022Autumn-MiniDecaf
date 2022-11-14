@@ -71,6 +71,14 @@ def p_type(p):
 #     p[0] = Function(p[1], p[2], p[6], NULL)
 
 
+# 函数声明
+def p_function_declare(p):
+    """
+    function : type Identifier LParen params RParen Semi
+    """
+    p[0] = Function(p[1], p[2], NULL, p[4])
+
+
 # params 可以为 empty
 def p_function_def(p):
     """

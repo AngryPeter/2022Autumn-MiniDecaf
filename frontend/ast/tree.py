@@ -75,13 +75,13 @@ class Function(Node):
         self,
         ret_t: TypeLiteral,
         ident: Identifier,
-        body: Block,
+        body: Optional[Block] = None,
         params: Optional[ParameterList] = None
     ) -> None:
         super().__init__("function")
         self.ret_t = ret_t
         self.ident = ident
-        self.body = body
+        self.body = body or NULL
         self.params = params or NULL
 
     def __getitem__(self, key: int) -> Node:

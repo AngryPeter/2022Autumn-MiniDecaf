@@ -45,7 +45,8 @@ class TACGen(Visitor[FuncVisitor, None]):
                 mv.nextTempId = nextTempId
                 functions[func_ident].body.accept(self, mv)
                 mv.visitEnd()
-            else:
+            elif not functions[func_ident].body is NULL:
+                # 只处理定义函数
                 paramLen = functions[func_ident].params.__len__
                 fv = pw.visitFunc(func_ident, paramLen)
                 fv.nextTempId = nextTempId
@@ -55,6 +56,7 @@ class TACGen(Visitor[FuncVisitor, None]):
                 functions[func_ident].body.accept(self, fv)
                 fv.visitEnd()
                 nextTempId = fv.nextTempId
+            # 不确定是否要额外处理只声明的函数
         return pw.visitEnd()
     
     # TODO: Step9-12 新增visitCall函数
