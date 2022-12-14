@@ -42,6 +42,8 @@ class ScopeStack:
     # To open a new scope.
     def open(self, scope: Scope) -> None:
         if len(self.stack) < self.scopeDepth:
+            # print("open-scope:")
+            # print(scope.funcScope)
             self.stack.append(scope)
         else:
             raise ScopeStackOverflow

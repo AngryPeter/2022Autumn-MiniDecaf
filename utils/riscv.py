@@ -138,12 +138,63 @@ class Riscv:
             return "j " + str(self.target)
     
     class Param(TACInstr):
-        def __init__(self, src: Temp, num: int) -> None:
+        def __init__(self, src: Temp, index: int) -> None:
             super().__init__(InstrKind.SEQ, [], [src], None)
-            self.param_num = num
+            self.index = index
 
         def __str__(self) -> str:
             return ""
+
+    class GetParam(TACInstr):
+        def __init__(self, dst: Temp, index: int) -> None:
+            super().__init__(InstrKind.SEQ, [dst], [], None)
+            self.index = index
+
+        def __str__(self) -> str:
+            return ""
+
+    class Call(TACInstr):
+        def __init__(self, dst: Temp, target: Label) -> None:
+            super().__init__(InstrKind.JMP, [dst], [], target)
+            self.target = target
+            self.dst = dst
+
+        def __str__(self) -> str:
+            return "call " + str(self.target.func)
+
+    # TODO: Step10-9 为 Load 和 LoadSymbol 添加对应的 RISCV指令
+    class LoadSymbol(TACInstr):
+        def __init__(self, dst: Temp, symbol: str) -> None:
+            super().__init__(InstrKind.SEQ, [dst], [], None)
+            self.dst = dst      # 存储 symbol 符号地址的寄存器
+            self.symbol = symbol    # 字符串
+
+        def __str__(self) -> str:
+            return "la "+ Riscv.FMT2.format(str(self.dsts[0]), self.symbol)
+    
+    class LoadGlobalVar(TACInstr):
+        def __init__(self, dst: Temp, src: Temp, offset: int) -> None:
+            super().__init__(InstrKind.SEQ, [dst], [src], None)
+            self.dst = dst      # 存储全局变量值的寄存器
+            self.src = src      # 存储全局变量地址的寄存器
+            self.offset = offset    # 偏移量
+
+        def __str__(self) -> str:
+            return "lw " + Riscv.FMT_OFFSET.format(
+                str(self.dsts[0]), str(self.offset), str(self.srcs[0])
+            )
+    
+    class Store(TACInstr):
+        def __init__(self, data: Temp, addr: Temp, offset: int) -> None:
+            super().__init__(InstrKind.SEQ, [], [data, addr], None)
+            self.data = data      # 存储全局变量值的寄存器
+            self.addr = addr      # 存储全局变量地址的寄存器
+            self.offset = offset    # 偏移量
+
+        def __str__(self) -> str:
+            return "sw " + Riscv.FMT_OFFSET.format(
+                str(self.srcs[0]), str(self.offset), str(self.srcs[1])
+            )
 
     class SPAdd(NativeInstr):
         def __init__(self, offset: int) -> None:

@@ -55,6 +55,10 @@ class Program(ListNode["Function"]):
 
     def functions(self) -> dict[str, Function]:
         return {func.ident.value: func for func in self if isinstance(func, Function)}
+    
+    # TODO: step10-2 允许声明作为 program 的孩子节点
+    def globals(self) -> dict[str, Declaration]:
+        return {decl.ident.value: decl for decl in self if isinstance(decl, Declaration)}
 
     def hasMainFunc(self) -> bool:
         return "main" in self.functions()
@@ -273,12 +277,16 @@ class Block(Statement, ListNode[Union["Statement", "Declaration"]]):
 
     def __init__(self, *children: Union[Statement, Declaration]) -> None:
         super().__init__("block", list(children))
+        self.params = NULL
 
     def accept(self, v: Visitor[T, U], ctx: T):
         return v.visitBlock(self, ctx)
 
     def is_block(self) -> bool:
         return True
+
+    def add_params(self, params: ParameterList) -> None:
+        self.params = params
 
 
 class Declaration(Node):

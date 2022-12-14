@@ -81,22 +81,70 @@ class BruteRegAlloc(RegAlloc):
         instr = loc.instr
         srcRegs: list[Reg] = []
         dstRegs: list[Reg] = []
+        # TODO: step9-15 为函数传参进行特殊指令生成
 
-        for i in range(len(instr.srcs)):
-            temp = instr.srcs[i]
-            if isinstance(temp, Reg):
-                srcRegs.append(temp)
+        if type(instr) == Riscv.Param:
+            if instr.index > 7: # 压栈
+                temp = instr.srcs[0]
+                reg = self.allocRegFor(temp, True, loc.liveIn, subEmitter)
+                subEmitter.emitNative(Riscv.NativeStoreWord(reg, Riscv.SP, 4 * (instr.index - 8)))
             else:
+                temp = instr.srcs[0]
+                reg = Riscv.ArgRegs[instr.index]
+                if reg.occupied:
+                    subEmitter.emitStoreToStack(reg)
+                    subEmitter.emitComment("  spill {} ({})".format(str(reg), str(reg.temp)))
+                    self.unbind(reg.temp)
+                dstRegs = [reg]
                 srcRegs.append(self.allocRegFor(temp, True, loc.liveIn, subEmitter))
-
-        for i in range(len(instr.dsts)):
-            temp = instr.dsts[i]
+                mv_instr = Riscv.Move(reg, self.bindings[temp.index])
+                subEmitter.emitNative(mv_instr.toNative(dstRegs, srcRegs))
+        elif type(instr) == Riscv.GetParam:
+            if instr.index > 7: # 出栈
+                temp = instr.dsts[0]
+                reg = self.allocRegFor(temp, False, loc.liveIn, subEmitter)
+                subEmitter.emitNative(Riscv.NativeLoadWord(reg, Riscv.SP, subEmitter.nextLocalOffset + 4 * (instr.index - 8)))
+            else:
+                temp = instr.dsts[0]
+                if isinstance(temp, Reg):
+                    dstRegs.append(temp)
+                else:
+                    dstRegs.append(self.allocRegFor(temp, False, loc.liveIn, subEmitter))
+                reg = Riscv.ArgRegs[instr.index]
+                srcRegs = [reg]
+                mv_instr = Riscv.Move(dstRegs[0], reg)
+                subEmitter.emitNative(mv_instr.toNative(dstRegs, srcRegs))
+        elif type(instr) == Riscv.Call:
+            # 保存 caller-saved 寄存器
+            for i in range(len(Riscv.CallerSaved)):
+                if Riscv.CallerSaved[i].isUsed():
+                    subEmitter.emitStoreToStack(Riscv.CallerSaved[i])
+            temp = instr.dsts[0]
             if isinstance(temp, Reg):
                 dstRegs.append(temp)
             else:
                 dstRegs.append(self.allocRegFor(temp, False, loc.liveIn, subEmitter))
+            srcRegs = [Riscv.A0]
+            mv_instr = Riscv.Move(dstRegs[0], srcRegs[0])
+            subEmitter.emitNative(instr.toNative(dstRegs, srcRegs))
+            subEmitter.emitNative(mv_instr.toNative(dstRegs, srcRegs))
+            subEmitter.emitStoreToStack(dstRegs[0])
+        else:
+            for i in range(len(instr.srcs)):
+                temp = instr.srcs[i]
+                if isinstance(temp, Reg):
+                    srcRegs.append(temp)
+                else:
+                    srcRegs.append(self.allocRegFor(temp, True, loc.liveIn, subEmitter))
 
-        subEmitter.emitNative(instr.toNative(dstRegs, srcRegs))
+            for i in range(len(instr.dsts)):
+                temp = instr.dsts[i]
+                if isinstance(temp, Reg):
+                    dstRegs.append(temp)
+                else:
+                    dstRegs.append(self.allocRegFor(temp, False, loc.liveIn, subEmitter))
+            subEmitter.emitNative(instr.toNative(dstRegs, srcRegs))
+        
 
     def allocRegFor(
         self, temp: Temp, isRead: bool, live: set[int], subEmitter: SubroutineEmitter

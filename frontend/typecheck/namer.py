@@ -57,18 +57,17 @@ class Namer(Visitor[ScopeStack, None]):
             # 函数名加入全局符号表
             ctx.globalscope.declare(symbol)
             func.setattr("symbol", symbol)
-            localScope = Scope(ScopeKind.LOCAL)
-            ctx.open(localScope)
+            # localScope = Scope(ScopeKind.LOCAL, True)
+            # ctx.open(localScope)
             if not func.params is NULL:
                 # 添加参数类型
                 for param in func.params:
                     symbol.addParaType(param.var_t)
-                    # 将参数添加到局部作用域
-                func.params.accept(self, ctx)
             if not func.body is NULL:
+                func.body.add_params(func.params)
                 # 定义函数
                 func.body.accept(self, ctx)
-            ctx.close()
+            # ctx.close()
         else:
             # 重复声明，要求类型一致
             if func.body is NULL and func.ret_t == symbol.type:
@@ -77,18 +76,21 @@ class Namer(Visitor[ScopeStack, None]):
                 if symbol.definition:   # 已经定义
                     raise DecafGlobalVarDefinedTwiceError(func.ident.value)
                 else:
-                    localScope = Scope(ScopeKind.LOCAL)
-                    ctx.open(localScope)
+                    # 需要让 param 和 body 在同一个作用域
+                    # localScope = Scope(ScopeKind.LOCAL) 会导致函数内的 block 不能新开作用域
+                    # ctx.open(localScope)
                     if not func.params is NULL:
                         # 添加参数类型
                         for param in func.params:
                             symbol.addParaType(param.var_t)
                             # 将参数添加到局部作用域
-                        func.params.accept(self, ctx)
+                        # func.params.accept(self, ctx)
                     # 定义函数
-                    func.body.accept(self, ctx)
+                    else:   # 无参数
+                        func.body.add_params(func.params)
+                        func.body.accept(self, ctx)
                     symbol.definition = True
-                    ctx.close()
+                    # ctx.close()
 
 
     def visitParameterList(self, params:ParameterList, ctx: ScopeStack) -> None:
@@ -122,8 +124,15 @@ class Namer(Visitor[ScopeStack, None]):
             
     def visitBlock(self, block: Block, ctx: ScopeStack) -> None:
         # TODO: Step7-1 设置局部作用域
+        # print("block-namer:", ctx.currentScope().funcScope)
+        # if ctx.currentScope().funcScope:
+        #     for child in block:
+        #         child.accept(self, ctx)
+        # else:
         localScope = Scope(ScopeKind.LOCAL)
         ctx.open(localScope)
+        if block.params is not None:
+            block.params.accept(self, ctx)
         for child in block:
             child.accept(self, ctx)
         ctx.close()
@@ -209,12 +218,18 @@ class Namer(Visitor[ScopeStack, None]):
             raise DecafGlobalVarDefinedTwiceError(decl.ident.value)
         # ScopeStack.declare : 加入符号表
         else:
-            symbol = VarSymbol(decl.ident.value, decl.var_t.type)
+            # TODO: Step10-3 判断全局变量作用域，并且全局变量只支持常量初始化，需要进行语义检查
+            # print(ctx.currentScope())
+            isGlobal = ctx.isGlobalScope()
+            # print("declaration-namer:", isGlobal, decl.ident.value)
+            symbol = VarSymbol(decl.ident.value, decl.var_t.type, isGlobal)
             ctx.declare(symbol)
             # Declaration.setattr : VarSymbol 存入 AST
             decl.setattr("symbol", symbol)
             # 初值表达式
             if decl.init_expr != NULL:
+                if type(decl.init_expr) == Call and isGlobal:
+                    raise DecafGlobalVarBadInitValueError(decl.ident.value)
                 decl.init_expr.accept(self, ctx)
 
     def visitAssignment(self, expr: Assignment, ctx: ScopeStack) -> None:

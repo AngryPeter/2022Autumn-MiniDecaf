@@ -8,11 +8,13 @@ from utils.label.label import Label, LabelKind
 from .context import Context
 from .funcvisitor import FuncVisitor
 from .tacprog import TACProg
+from frontend.ast.tree import Declaration
 
 
 class ProgramWriter:
-    def __init__(self, funcs: list[str]) -> None:
+    def __init__(self, funcs: list[str], globals: dict[str, Declaration]) -> None:
         self.funcs = []
+        self.globals = globals
         self.ctx = Context()
         for func in funcs:
             self.funcs.append(func)
@@ -27,4 +29,4 @@ class ProgramWriter:
         return FuncVisitor(entry, numArgs, self.ctx)
 
     def visitEnd(self) -> TACProg:
-        return TACProg(self.ctx.funcs)
+        return TACProg(self.ctx.funcs, self.globals)

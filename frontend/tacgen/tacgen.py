@@ -36,8 +36,10 @@ class TACGen(Visitor[FuncVisitor, None]):
         # # Remember to call pw.visitEnd before finishing the translation phase.
         # return pw.visitEnd()
         functions = program.functions()
+        globals = program.globals()
         func_idents = [func for func in functions.keys()]
-        pw = ProgramWriter(func_idents)
+        pw = ProgramWriter(func_idents, globals)
+        self.pw = pw
         nextTempId = 0
         for func_ident in func_idents:
             if func_ident == 'main':
@@ -50,9 +52,21 @@ class TACGen(Visitor[FuncVisitor, None]):
                 paramLen = functions[func_ident].params.__len__
                 fv = pw.visitFunc(func_ident, paramLen)
                 fv.nextTempId = nextTempId
+                index = 0
+                # if len(functions[func_ident].params) < 9:
                 for param in functions[func_ident].params:
                     param.accept(self, fv)
-                    fv.visitGetParam(param.getattr("symbol").temp)
+                    fv.visitGetParam(param.getattr("symbol").temp, index)
+                    index += 1
+                # else:
+                #     for param in functions[func_ident].params[:8]:
+                #         param.accept(self, fv)
+                #         fv.visitGetParam(param.getattr("symbol").temp, index)
+                #         index += 1
+                #     for param in functions[func_ident].params[::-1][:-8]:
+                #         param.accept(self, fv)
+                #         fv.visitGetParam(param.getattr("symbol").temp, index)
+                #         index += 1
                 functions[func_ident].body.accept(self, fv)
                 fv.visitEnd()
                 nextTempId = fv.nextTempId
@@ -63,9 +77,21 @@ class TACGen(Visitor[FuncVisitor, None]):
     def visitCall(self, call: Call, mv: FuncVisitor) -> None:
         """依次访问所有调用参数, 并将它们的返回值(getattr("val"))依次执行 PARAM 指令，
         然后执行 CALL 指令, 并新建临时变量为函数设置返回值。"""
-        for arg in call.arguments.children[::-1]:
+        index = 0
+        # if len(call.arguments.children) < 9:
+        for arg in call.arguments.children:
             arg.accept(self, mv)
-            mv.visitParam(arg.getattr("val"))
+            mv.visitParam(arg.getattr("val"), index)
+            index += 1
+        # else:
+        #     for arg in call.arguments.children[:8]: # 前 8 个参数使用寄存器顺序传参
+        #         arg.accept(self, mv)
+        #         mv.visitParam(arg.getattr("val"), index)
+        #         index += 1
+        #     for arg in call.arguments.children[::-1][:-8]:  # 多余的参数通过栈传参
+        #         arg.accept(self, mv)
+        #         mv.visitParam(arg.getattr("val"), index)
+        #         index += 1
         call.setattr("val", mv.visitCall(mv.ctx.getFuncLabel(call.ident.value)))
 
     def visitBlock(self, block: Block, mv: FuncVisitor) -> None:
@@ -83,8 +109,25 @@ class TACGen(Visitor[FuncVisitor, None]):
         """
         1. Set the 'val' attribute of ident as the temp variable of the 'symbol' attribute of ident.
         """
-        # TODO: step5-4 设置该表达式的返回值 val 为该变量对应符号里的 symbol
-        ident.setattr("val", ident.getattr("symbol").temp)
+        # TODO: step10-6 加载全局变量方式为：首先加载全局变量符号的地址，然后根据地址来加载数据。因此，需要定义两个中间代码指令，完成全局变量值的加载
+        symbol = ident.getattr("symbol")
+        if symbol.isGlobal:
+            for globalVar in self.pw.globals:
+                if globalVar == ident.value:    # 变量名匹配
+                    src = mv.visitLoadSymbol(ident.value)
+                    dst = mv.visitLoadGlobalVar(src, 0)
+                    symbol.temp = dst
+                    symbol.isGlobal = True
+                    ident.setattr("addr", src)
+                    ident.setattr("global", True)   # 为之后给全局变量赋值提供信息
+                    # print("test: ", ident.getattr("global"))
+                    ident.setattr("addr", src)
+                    ident.setattr("val", symbol.temp)
+                    break
+        else:
+            # TODO: step5-4 设置该表达式的返回值 val 为该变量对应符号里的 symbol
+            ident.setattr("global", False)
+            ident.setattr("val", ident.getattr("symbol").temp)
 
     def visitDeclaration(self, decl: Declaration, mv: FuncVisitor) -> None:
         """
@@ -109,10 +152,19 @@ class TACGen(Visitor[FuncVisitor, None]):
         3. Set the 'val' attribute of expr as the value of assignment instruction.
         """
         # TODO: step5-6 设置赋值语句的中间代码（参考 visitBinary 实现）
+        # TODO: step10-9 将对全局变量的赋值特殊处理
+        expr.lhs.accept(self, mv)
         expr.rhs.accept(self, mv)
-        # 使用 temp 添加 TAC 指令，而非 var
         temp = expr.lhs.getattr("symbol").temp
-        mv.visitAssignment(temp, expr.rhs.getattr("val"))
+        # 使用 temp 添加 TAC 指令，而非 var
+        isGlobal = expr.lhs.getattr("global")
+        # print(expr.lhs)
+        # print(isGlobal)
+        if isGlobal:
+            addr = expr.lhs.getattr("addr")
+            mv.visitStore(expr.rhs.getattr("val"), addr, 0)
+        else:
+            mv.visitAssignment(temp, expr.rhs.getattr("val"))
         # 设置表达式 val
         expr.setattr("val", temp)
 

@@ -207,9 +207,10 @@ class Mark(TACInstr):
 # TODO: Step9-9 新增 PARAM / CALL 指令
 # 设置函数调用参数
 class Param(TACInstr):
-    def __init__(self, param: Temp) -> None:
+    def __init__(self, param: Temp, index: int) -> None:
         super().__init__(InstrKind.SEQ, [], [param], None)
         self.param = param
+        self.index = index
 
     def __str__(self) -> str:
         return "PARAM %s" % self.param
@@ -219,9 +220,10 @@ class Param(TACInstr):
 
 
 class GetParam(TACInstr):
-    def __init__(self, param: Temp) -> None:
+    def __init__(self, param: Temp, index: int) -> None:
         super().__init__(InstrKind.SEQ, [param], [], None)
         self.param = param
+        self.index = index
 
     def __str__(self) -> str:
         return "GETPARAM %s" % self.param
@@ -242,3 +244,47 @@ class Call(TACInstr):
 
     def accept(self, v: TACVisitor) -> None:
         v.visitCall(self)
+
+
+# TODO: step10-4 	symbol 为字符串，加载 symbol 符号所代表的地址
+class LoadSymbol(TACInstr):
+    def __init__(self, dst: Temp, symbol: str) -> None:
+        super().__init__(InstrKind.SEQ, [dst], [], None)
+        self.dst = dst      # 存储 symbol 符号地址的寄存器
+        self.symbol = symbol    # 字符串
+
+    def __str__(self) -> str:
+        return "%s = LoadSymbol %s" % (self.dst, self.symbol)
+
+    def accept(self, v: TACVisitor) -> None:
+        v.visitLoadSymbol(self)
+
+
+# TODO: step10-5 临时变量 src 中存储地址，加载与该地址相差 offset 个偏移的内存地址中的数据到 dst 中
+class Load(TACInstr):
+    def __init__(self, dst: Temp, src: Temp, offset: int) -> None:
+        super().__init__(InstrKind.SEQ, [dst], [src], None)
+        self.dst = dst      # 存储全局变量值的寄存器
+        self.src = src      # 存储全局变量地址的寄存器
+        self.offset = offset    # 偏移量
+
+    def __str__(self) -> str:
+        return "%s = LOAD %s, %s" % (self.dst, self.src, self.offset)
+
+    def accept(self, v: TACVisitor) -> None:
+        v.visitLoad(self)
+
+
+
+class Store(TACInstr):
+    def __init__(self, data: Temp, addr: Temp, offset: int) -> None:
+        super().__init__(InstrKind.SEQ, [], [data, addr], None)
+        self.data = data      # 存储全局变量值的寄存器
+        self.addr = addr      # 存储全局变量地址的寄存器
+        self.offset = offset    # 偏移量
+
+    def __str__(self) -> str:
+        return "Store %s to %s, %s" % (self.data, self.addr, self.offset)
+
+    def accept(self, v: TACVisitor) -> None:
+        v.visitStore(self)

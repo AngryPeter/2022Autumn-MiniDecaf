@@ -108,13 +108,27 @@ class FuncVisitor:
         return self.continueLabelStack[-1]
 
     # TODO: Step9-10 为 PARAM 和 CALL 新增相应的 visit 函数
-    def visitParam(self, param: Temp) -> None:
-        self.func.add(Param(param))
+    def visitParam(self, param: Temp, index: int) -> None:
+        self.func.add(Param(param, index))
 
-    def visitGetParam(self, param: Temp) -> None:
-        self.func.add(GetParam(param))
+    def visitGetParam(self, param: Temp, index: int) -> None:
+        self.func.add(GetParam(param, index))
 
     def visitCall(self, func: Label) -> None:
         temp = self.freshTemp()
         self.func.add(Call(temp, func))
         return temp
+
+    # TODO: Step10-10 添加对应 tac 指令的生成
+    def visitLoadSymbol(self, symbol: str) -> Temp:
+        temp = self.freshTemp()
+        self.func.add(LoadSymbol(temp, symbol))
+        return temp
+    
+    def visitLoadGlobalVar(self, src: Temp, offset: int) -> Temp:
+        dst = self.freshTemp()
+        self.func.add(Load(dst, src, offset))
+        return dst
+
+    def visitStore(self, data: Temp, addr: Temp, offset: int) -> None:
+        self.func.add(Store(data, addr, offset))

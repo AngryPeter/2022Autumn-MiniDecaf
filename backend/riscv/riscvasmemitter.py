@@ -13,6 +13,8 @@ from ..subroutineemitter import SubroutineEmitter
 from ..subroutineinfo import SubroutineInfo
 
 from utils.tac import tacop
+from frontend.ast.tree import Declaration
+from frontend.ast.node import NULL
 """
 RiscvAsmEmitter: an AsmEmitter for RiscV
 """
@@ -23,12 +25,35 @@ class RiscvAsmEmitter(AsmEmitter):
         self,
         allocatableRegs: list[Reg],
         callerSaveRegs: list[Reg],
+        globals: dict[str, Declaration]
     ) -> None:
         super().__init__(allocatableRegs, callerSaveRegs)
+        self.globals = globals
+        self.bss = {}
+        self.data = {}
 
     
         # the start of the asm code
         # int step10, you need to add the declaration of global var here
+        # TODO: Step10-7 处理全局变量的声明: .data & .bss
+        for key, value in self.globals.items():
+            if value.init_expr is NULL: # 无初值
+                self.bss[key] = value
+            else:   # 有初值
+                self.data[key] = value
+        if self.bss:    # 生成 bss 段
+            self.printer.println(".bss")
+            for key, value in self.bss.items():
+                self.printer.println(".globl " + key)
+                self.printer.println(key + ":")
+                self.printer.println("    " + ".space 4")
+        if self.data:    # 生成 bss 段
+            self.printer.println(".data")
+            for key, value in self.data.items():
+                self.printer.println(".globl " + key)
+                self.printer.println(key + ":")
+                self.printer.println("    " + ".word " + str(value.init_expr.value))
+        
         self.printer.println(".text")
         self.printer.println(".global main")
         self.printer.println("")
@@ -117,14 +142,29 @@ class RiscvAsmEmitter(AsmEmitter):
         # TODO: Step9-13 新增 visitParam 和 visitDirectCall 函数
         def visitParam(self, instr: Param) -> None:
             """新增 visitParam: 用于保存函数调用的参数（可以保存在栈上或者函数调用寄存器里）"""
+            self.seq.append(Riscv.Param(instr.param, instr.index))
 
         def visitCall(self, instr: Call) -> None:
             """visitDirectCall: 调用函数（函数调用前后 caller-save 寄存器的保存和恢复，
                函数调用以及对函数返回值的处理）。"""
+            self.seq.append(Riscv.Call(instr.dst, instr.func))
         
         def visitGetParam(self, instr: GetParam) -> None:
-            """参数出栈"""
-            
+            """获取参数"""
+            self.seq.append(Riscv.GetParam(instr.param, instr.index))
+        
+        # TODO: Step10-8 为 Load 和 LoadSymbol 选择对应的 RISCV指令
+        def visitLoad(self, instr: Load) -> None:
+            """从地址中获取全局变量"""
+            self.seq.append(Riscv.LoadGlobalVar(instr.dst, instr.src, instr.offset))
+
+        def visitStore(self, instr: Store) -> None:
+            """向地址为全局变量赋值"""
+            self.seq.append(Riscv.Store(instr.data, instr.addr, instr.offset))
+        
+        def visitLoadSymbol(self, instr: LoadSymbol) -> None:
+            """获取全局变量的地址"""
+            self.seq.append(Riscv.LoadSymbol(instr.dst, instr.symbol))
         # in step11, you need to think about how to store the array 
 """
 RiscvAsmEmitter: an SubroutineEmitter for RiscV
@@ -157,6 +197,7 @@ class RiscvSubroutineEmitter(SubroutineEmitter):
 
     def emitComment(self, comment: str) -> None:
         # you can add some log here to help you debug
+        # print(comment)
         pass
     
     # store some temp to stack
@@ -201,6 +242,10 @@ class RiscvSubroutineEmitter(SubroutineEmitter):
                 self.printer.printInstr(
                     Riscv.NativeStoreWord(Riscv.CalleeSaved[i], Riscv.SP, 4 * i)
                 )
+        # save RA
+        self.printer.printInstr(
+            Riscv.NativeStoreWord(Riscv.RA, Riscv.SP, 4 * len(Riscv.CalleeSaved))
+        )
 
         self.printer.printComment("end of prologue")
         self.printer.println("")
@@ -227,6 +272,10 @@ class RiscvSubroutineEmitter(SubroutineEmitter):
                 self.printer.printInstr(
                     Riscv.NativeLoadWord(Riscv.CalleeSaved[i], Riscv.SP, 4 * i)
                 )
+        # load RA
+        self.printer.printInstr(
+                Riscv.NativeLoadWord(Riscv.RA, Riscv.SP, 4 * len(Riscv.CalleeSaved))
+            )
 
         self.printer.printInstr(Riscv.SPAdd(self.nextLocalOffset))
         self.printer.printComment("end of epilogue")

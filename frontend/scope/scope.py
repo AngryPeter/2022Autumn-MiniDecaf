@@ -17,9 +17,10 @@ class ScopeKind(Enum):
 
 
 class Scope:
-    def __init__(self, kind: ScopeKind) -> None:
+    def __init__(self, kind: ScopeKind, funcScope: bool = False) -> None:
         self.kind = kind
         self.symbols = {}
+        self.funcScope = funcScope
 
     # To check if a symbol is declared in the scope.
     def containsKey(self, key: str) -> bool:
