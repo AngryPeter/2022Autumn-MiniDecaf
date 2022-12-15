@@ -116,9 +116,12 @@ class BruteRegAlloc(RegAlloc):
                 subEmitter.emitNative(mv_instr.toNative(dstRegs, srcRegs))
         elif type(instr) == Riscv.Call:
             # 保存 caller-saved 寄存器
+            temp_list = {}
             for i in range(len(Riscv.CallerSaved)):
                 if Riscv.CallerSaved[i].isUsed():
+                    temp_list[Riscv.CallerSaved[i]] = Riscv.CallerSaved[i].temp
                     subEmitter.emitStoreToStack(Riscv.CallerSaved[i])
+                    self.unbind(Riscv.CallerSaved[i].temp)
             temp = instr.dsts[0]
             if isinstance(temp, Reg):
                 dstRegs.append(temp)
@@ -129,6 +132,10 @@ class BruteRegAlloc(RegAlloc):
             subEmitter.emitNative(instr.toNative(dstRegs, srcRegs))
             subEmitter.emitNative(mv_instr.toNative(dstRegs, srcRegs))
             subEmitter.emitStoreToStack(dstRegs[0])
+            # 恢复 caller-saved 寄存器
+            for reg in temp_list.keys():
+                subEmitter.emitLoadFromStack(reg, temp_list[reg])
+                self.bind(temp_list[reg], reg)
         else:
             for i in range(len(instr.srcs)):
                 temp = instr.srcs[i]
