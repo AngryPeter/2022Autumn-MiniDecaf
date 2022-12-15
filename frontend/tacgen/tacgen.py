@@ -81,6 +81,7 @@ class TACGen(Visitor[FuncVisitor, None]):
         # if len(call.arguments.children) < 9:
         for arg in call.arguments.children:
             arg.accept(self, mv)
+        for arg in call.arguments.children:
             mv.visitParam(arg.getattr("val"), index)
             index += 1
         # else:
