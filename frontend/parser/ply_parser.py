@@ -17,6 +17,8 @@ from frontend.ast.tree import *
 from frontend.lexer import lex
 from utils.error import DecafSyntaxError
 
+from frontend.type.array import ArrayType
+
 tokens = lex.tokens
 error_stack = list[DecafSyntaxError]()
 
@@ -111,6 +113,7 @@ def p_first_param_item(p):
     """
     param_item : declaration
     """
+    p[1].is_param = True
     p[0] = p[1]
 
 
@@ -306,11 +309,92 @@ def p_opt_expression_empty(p):
     p[0] = NULL
 
 
+# TODO: step11-2 修改文法，允许识别数组
 def p_declaration(p):
     """
-    declaration : type Identifier
+    declaration : type Identifier index
     """
-    p[0] = Declaration(p[1], p[2])
+    length = len(p[3].children)
+    if p[3].isParam == False: # 非数组
+        p[0] = Declaration(p[1], p[2])
+    else:
+        if length > 0:
+            array = ArrayType(INT, p[3].children[length - 1])
+            for i in range(length - 1): # 从后向前设置数组类型
+                rank = length - i - 2
+                array = ArrayType(array, p[3].children[rank])
+            p[0] = Declaration(TArray(array), p[2])
+        else:
+            array = ArrayType(INT, 5000)
+            p[0] = Declaration(TArray(array), p[2])
+
+
+def p_index_item(p):
+    """
+    index : index LBracket Integer RBracket
+    """
+    if p[3] is not NULL:
+        p[1].children.append(p[3])
+    p[1].isParam = True
+    p[0] = p[1]
+
+
+def p_index_empty_item(p):
+    """
+    index : index LBracket RBracket
+    """
+    p[1].isParam = True
+    p[0] = p[1]
+
+
+def p_index_empty(p):
+    """
+    index : empty
+    """
+    p[0] = IndexList()
+
+
+# TODO: step12-1 初始化语法
+def p_declaration_array_init(p):
+    """
+    declaration : type Identifier index Assign LBrace Initlist RBrace
+    """
+    length = len(p[3].children)
+    array = ArrayType(INT, p[3].children[length - 1])
+    for i in range(length - 1): # 从后向前设置数组类型
+        rank = length - i - 2
+        array = ArrayType(array, p[3].children[rank])
+    p[0] = Declaration(TArray(array), p[2], p[6])
+
+
+def p_initlist_empty(p):
+    """
+    Initlist : empty
+    """
+    p[0] = InitList()
+
+
+def p_initlist(p):
+    """
+    Initlist : Initlist init_item
+    """
+    if p[2] is not NULL:
+        p[1].values.append(p[2])
+    p[0] = p[1]
+
+
+def p_inititem_1(p):
+    """
+    init_item : Integer
+    """
+    p[0] = p[1]
+
+
+def p_inititem_2(p):
+    """
+    init_item : Comma Integer
+    """
+    p[0] = p[2]
 
 
 def p_declaration_init(p):
@@ -356,6 +440,19 @@ def p_postfix(p):
     p[0] = Call(p[1], p[3])
 
 
+def p_postfix_array(p):
+    """
+    postfix : postfix LBracket expression RBracket
+    """
+    if type(p[1]) == Identifier:
+        expr_list = ExpressionList()
+        expr_list.children.append(p[3])
+        p[0] = IndexExpr(p[1], expr_list)
+    else:
+        p[1].index.children.append(p[3])
+        p[0] = p[1]
+
+
 # 无参数
 def p_arguments_empty(p):
     """
@@ -390,6 +487,7 @@ def p_first_argument_item(p):
 def p_binary_expression(p):
     """
     assignment : Identifier Assign expression
+        | unary Assign expression
     logical_or : logical_or Or logical_and
     logical_and : logical_and And bit_or
     bit_or : bit_or BitOr xor

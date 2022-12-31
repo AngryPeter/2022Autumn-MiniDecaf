@@ -196,6 +196,18 @@ class Riscv:
                 str(self.srcs[0]), str(self.offset), str(self.srcs[1])
             )
 
+    # TODO: step11-8 添加 riscv 指令
+    class Alloc(TACInstr):
+        def __init__(self, dst: Temp, size: int) -> None:
+            super().__init__(InstrKind.SEQ, [dst], [], None)
+            self.dst = dst      # 存储数组首地址的寄存器
+            self.size = size      # 存储数组大小的寄存器
+
+        def __str__(self) -> str:
+            return "addi " + Riscv.FMT3.format(
+                str(Riscv.SP), str(Riscv.SP), str(-self.size)
+            )
+
     class SPAdd(NativeInstr):
         def __init__(self, offset: int) -> None:
             super().__init__(InstrKind.SEQ, [Riscv.SP], [Riscv.SP], None)

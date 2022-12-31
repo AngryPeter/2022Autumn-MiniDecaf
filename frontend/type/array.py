@@ -3,6 +3,8 @@ from __future__ import annotations
 from .builtin_type import INT
 from .type import DecafType
 
+from utils.error import DecafBadArraySizeError
+
 """
 Array type is represented in a recursive form.
 
@@ -19,7 +21,12 @@ class ArrayType(DecafType):
     def __init__(self, base: DecafType, length: int) -> None:
         super().__init__()
         self.base = base
-        self.length = length
+        if type(length) == int:
+            self.length = length
+        else:
+            self.length = length.value
+        if self.length <= 0:
+            raise DecafBadArraySizeError()
 
     @property
     def indexed(self) -> DecafType:
@@ -31,6 +38,17 @@ class ArrayType(DecafType):
             return f"[{self.length}]{self.base._indexes}"
         else:
             return f"[{self.length}]"
+
+    @property
+    def indexes(self) -> str:
+        if isinstance(self.base, ArrayType):
+            old_res = self.base.indexes
+            new_res = [self.length]
+            new_res.extend(old_res)
+            return new_res
+        else:
+            res = [self.length]
+            return res
 
     @property
     def size(self) -> int:

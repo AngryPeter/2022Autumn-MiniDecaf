@@ -174,7 +174,7 @@ class BruteRegAlloc(RegAlloc):
                 return reg
 
         reg = self.emitter.allocatableRegs[
-            random.randint(0, len(self.emitter.allocatableRegs))
+            random.randint(0, len(self.emitter.allocatableRegs) - 1)
         ]
         subEmitter.emitStoreToStack(reg)
         subEmitter.emitComment("  spill {} ({})".format(str(reg), str(reg.temp)))

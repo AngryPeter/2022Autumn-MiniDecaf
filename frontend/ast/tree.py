@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Generic, Optional, TypeVar, Union
 
 from frontend.type import INT, DecafType
+from frontend.type.array import ArrayType
 from utils import T, U
 
 from .node import NULL, BinaryOp, Node, UnaryOp
@@ -304,6 +305,7 @@ class Declaration(Node):
         self.var_t = var_t
         self.ident = ident
         self.init_expr = init_expr or NULL
+        self.is_param = False
 
     def __getitem__(self, key: int) -> Node:
         return (self.var_t, self.ident, self.init_expr)[key]
@@ -508,6 +510,22 @@ class TInt(TypeLiteral):
         return v.visitTInt(self, ctx)
 
 
+class TArray(TypeLiteral):
+    "AST node of type `array`."
+
+    def __init__(self, type: ArrayType) -> None:
+        super().__init__("type_array", type)
+
+    def __getitem__(self, key: int) -> Node:
+        raise _index_len_err(key, self)
+
+    def __len__(self) -> int:
+        return 0
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitTArray(self, ctx)
+
+
 class ParameterList(ListNode[Declaration]):
     """
     AST node that represents a list of parameters.
@@ -554,3 +572,46 @@ class Call(Node):
 
     def accept(self, v: Visitor[T, U], ctx: T):
         return v.visitCall(self, ctx)
+
+
+# TODO: step11-1 设置索引运算对应的语法节点
+class IndexExpr(Expression):
+    """
+    AST node of an array expression.
+    """
+    def __init__(self, base: Identifier, index: ExpressionList) -> None:
+        super().__init__("IndexExpr")
+        self.base = base
+        self.index = index
+
+    def __len__(self) -> int:
+        return 2
+
+    def __getitem__(self, key: int) -> Node:
+        return (self.base, self.index)[key]
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitIndexExpr(self, ctx)
+
+
+class IndexList:
+    "记录数组维数的临时结点类"
+    def __init__(self) -> None:
+        self.children = []
+        self.isParam = False
+
+
+# TODO: step12-2 为初始化表达式设置节点
+class InitList(Expression):
+    def __init__(self) -> None:
+        super().__init__("init_value")
+        self.values = []
+
+    def __getitem__(self, key: int) -> Node:
+        raise self.values[key]
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+    def accept(self, v: Visitor[T, U], ctx: T):
+        return v.visitInitList(self, ctx)

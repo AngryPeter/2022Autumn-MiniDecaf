@@ -62,7 +62,7 @@ class Namer(Visitor[ScopeStack, None]):
             if not func.params is NULL:
                 # 添加参数类型
                 for param in func.params:
-                    symbol.addParaType(param.var_t)
+                    symbol.addParaType(param.var_t.type)
             if not func.body is NULL:
                 func.body.add_params(func.params)
                 # 定义函数
@@ -82,7 +82,7 @@ class Namer(Visitor[ScopeStack, None]):
                     if not func.params is NULL:
                         # 添加参数类型
                         for param in func.params:
-                            symbol.addParaType(param.var_t)
+                            symbol.addParaType(param.var_t.type)
                             # 将参数添加到局部作用域
                         # func.params.accept(self, ctx)
                     # 定义函数
@@ -91,7 +91,6 @@ class Namer(Visitor[ScopeStack, None]):
                         func.body.accept(self, ctx)
                     symbol.definition = True
                     # ctx.close()
-
 
     def visitParameterList(self, params:ParameterList, ctx: ScopeStack) -> None:
         for child in params:
@@ -113,13 +112,15 @@ class Namer(Visitor[ScopeStack, None]):
                 # 参数数目不一致
                 raise DecafBadFuncCallError(call.ident.value)
             # print(symbol.parameterNum)
-            # else:
-            #     for i in range(symbol.parameterNum):
-            #         # 检查类型
-            #         print(call.arguments.children[i].type)
-            #         print(symbol.getParaType(i))
-            #         if call.arguments.children[i].type != symbol.getParaType(i):
-            #             raise DecafBadFuncCallError(call.ident.value)
+            else:
+                for i in range(symbol.parameterNum):
+                    # TODO: step12-4 检查类型
+                    if type(call.arguments.children[i]) == Identifier:
+                        arg_symbol = ctx.lookup(call.arguments.children[i].value)
+                        # print(arg_symbol.type)
+                        # print(symbol.getParaType(i))
+                        if type(arg_symbol.type) != type(symbol.getParaType(i)):
+                            raise DecafBadFuncCallError(call.ident.value)
             call.arguments.accept(self, ctx)
             
     def visitBlock(self, block: Block, ctx: ScopeStack) -> None:
@@ -219,18 +220,32 @@ class Namer(Visitor[ScopeStack, None]):
         # ScopeStack.declare : 加入符号表
         else:
             # TODO: Step10-3 判断全局变量作用域，并且全局变量只支持常量初始化，需要进行语义检查
-            # print(ctx.currentScope())
             isGlobal = ctx.isGlobalScope()
-            # print("declaration-namer:", isGlobal, decl.ident.value)
             symbol = VarSymbol(decl.ident.value, decl.var_t.type, isGlobal)
             ctx.declare(symbol)
             # Declaration.setattr : VarSymbol 存入 AST
             decl.setattr("symbol", symbol)
-            # 初值表达式
-            if decl.init_expr != NULL:
-                if type(decl.init_expr) == Call and isGlobal:
-                    raise DecafGlobalVarBadInitValueError(decl.ident.value)
-                decl.init_expr.accept(self, ctx)
+            if type(decl.var_t.type) == ArrayType:
+                decl.ident.setattr("symbol", symbol)
+            else:
+                # 初值表达式
+                if decl.init_expr != NULL:
+                    if type(decl.init_expr) == Call and isGlobal:
+                        raise DecafGlobalVarBadInitValueError(decl.ident.value)
+                    if type(decl.init_expr) == Identifier:
+                        rhs_symbol = ctx.lookup(decl.init_expr.value)
+                        if type(rhs_symbol.type) == ArrayType:
+                            raise DecafTypeMismatchError()
+                    decl.init_expr.accept(self, ctx)
+
+    def visitIndexExpr(self, array: IndexExpr, ctx: T) -> None:
+        # TODO: step11-3 为数组类型进行类型检查
+        array.base.accept(self, ctx)
+        array.index.accept(self, ctx)
+        # 作为表达式的左值必须是形如 a[0][1][2] 的索引表达式
+        symbol = ctx.lookup(array.base.value)
+        if symbol.type.dim != len(array.index.children):
+            raise DecafBadIndexError(array.base.value)
 
     def visitAssignment(self, expr: Assignment, ctx: ScopeStack) -> None:
         """
@@ -238,11 +253,19 @@ class Namer(Visitor[ScopeStack, None]):
         """
         # TODO: step5-2 处理赋值
         # ScopeStack.lookup 检查左值是否定义
-        symbol = ctx.lookup(expr.lhs.value)
+        if type(expr.lhs) == IndexExpr:   # 数组类型需要检查数组变量名是否已定义
+            symbol = ctx.lookup(expr.lhs.base.value)
+        else:
+            symbol = ctx.lookup(expr.lhs.value)
         if symbol == None:  # 无定义报错
             raise DecafUndefinedVarError(expr.lhs.value)
         else:
             expr.lhs.setattr("symbol", symbol)
+            if type(expr.rhs) == Identifier:
+                rhs_symbol = ctx.lookup(expr.rhs.value)
+                if type(rhs_symbol.type) == ArrayType:
+                    raise DecafTypeMismatchError()
+        expr.lhs.accept(self, ctx)  # 对数组索引表达式进行类型检查
         # 类似 visitBinary
         expr.rhs.accept(self, ctx)
 

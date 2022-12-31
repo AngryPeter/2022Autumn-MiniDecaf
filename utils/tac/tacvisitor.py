@@ -51,3 +51,6 @@ class TACVisitor:
 
    def visitStore(self, instr: Store) -> None:
         self.visitOther(instr)
+
+   def visitAlloc(self, instr: Alloc) -> None:
+        self.visitOther(instr)

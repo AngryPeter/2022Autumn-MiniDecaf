@@ -11,6 +11,7 @@ from utils.tac.funcvisitor import FuncVisitor
 from utils.tac.programwriter import ProgramWriter
 from utils.tac.tacprog import TACProg
 from utils.tac.temp import Temp
+from utils.error import *
 
 """
 The TAC generation phase: translate the abstract syntax tree into three-address code.
@@ -82,7 +83,12 @@ class TACGen(Visitor[FuncVisitor, None]):
         for arg in call.arguments.children:
             arg.accept(self, mv)
         for arg in call.arguments.children:
-            mv.visitParam(arg.getattr("val"), index)
+            # print(arg.getattr("symbol"))
+            symbol = arg.getattr("symbol")
+            if symbol != None and symbol.isGlobal and type(symbol.type) == ArrayType:
+                mv.visitParam(arg.getattr("addr"), index)
+            else:
+                mv.visitParam(arg.getattr("val"), index)
             index += 1
         # else:
         #     for arg in call.arguments.children[:8]: # 前 8 个参数使用寄存器顺序传参
@@ -139,12 +145,36 @@ class TACGen(Visitor[FuncVisitor, None]):
         # TODO: step5-5 生成声明语句的TAC
         # 使用 getattr 方法获得在符号表构建阶段建立的符号
         symbol = decl.getattr("symbol")
-        # FuncVisitor.freshTemp 函数获取一个新的临时变量 temp 存储该变量
-        symbol.temp = mv.freshTemp()
-        # 如果有设置初值， visitAssignment 赋值
-        if decl.init_expr != NULL:
-            decl.init_expr.accept(self, mv)
-            mv.visitAssignment(getattr(symbol, "temp"), decl.init_expr.getattr("val"))
+        if type(symbol.type) == ArrayType:
+            if decl.is_param == False:
+                symbol.temp = mv.visitAlloc(decl.var_t.type.size)
+                # TODO: step12-3 生成数组初始化的 TAC
+                if decl.init_expr != NULL:
+                    # pass
+                    length = len(decl.init_expr.values)
+                    for rank in range(length):
+                        expr_list = ExpressionList()
+                        expr_list.children.append(IntLiteral(rank))
+                        idx_expr = IndexExpr(decl.ident, expr_list)
+                        value = decl.init_expr.values[rank]
+                        assign_expr = Assignment(idx_expr, value)
+                        assign_expr.accept(self, mv)
+                    if length < symbol.type.length:
+                        for rank in range(length, symbol.type.length):
+                            expr_list = ExpressionList()
+                            expr_list.children.append(IntLiteral(rank))
+                            idx_expr = IndexExpr(decl.ident, expr_list)
+                            assign_expr = Assignment(idx_expr, IntLiteral(0))
+                            assign_expr.accept(self, mv)
+            else:
+                symbol.temp = mv.freshTemp()
+        else:
+            # FuncVisitor.freshTemp 函数获取一个新的临时变量 temp 存储该变量
+            symbol.temp = mv.freshTemp()
+            # 如果有设置初值， visitAssignment 赋值
+            if decl.init_expr != NULL:
+                decl.init_expr.accept(self, mv)
+                mv.visitAssignment(getattr(symbol, "temp"), decl.init_expr.getattr("val"))
 
     def visitAssignment(self, expr: Assignment, mv: FuncVisitor) -> None:
         """
@@ -156,18 +186,24 @@ class TACGen(Visitor[FuncVisitor, None]):
         # TODO: step10-9 将对全局变量的赋值特殊处理
         expr.lhs.accept(self, mv)
         expr.rhs.accept(self, mv)
-        temp = expr.lhs.getattr("symbol").temp
-        # 使用 temp 添加 TAC 指令，而非 var
-        isGlobal = expr.lhs.getattr("global")
-        # print(expr.lhs)
-        # print(isGlobal)
-        if isGlobal:
-            addr = expr.lhs.getattr("addr")
-            mv.visitStore(expr.rhs.getattr("val"), addr, 0)
+        if type(expr.lhs) == IndexExpr:
+            # TODO: step11-5 数组变量赋值
+            temp = expr.rhs.getattr("val")
+            mv.visitStore(temp, expr.lhs.getattr("addr"), 0)
+            expr.setattr("val", expr.rhs.getattr("val"))
         else:
-            mv.visitAssignment(temp, expr.rhs.getattr("val"))
-        # 设置表达式 val
-        expr.setattr("val", temp)
+            if type(expr.lhs.getattr("symbol").type) == ArrayType:
+                raise DecafTypeMismatchError()
+            temp = expr.lhs.getattr("symbol").temp
+            # 使用 temp 添加 TAC 指令，而非 var
+            isGlobal = expr.lhs.getattr("global")
+            if isGlobal:
+                addr = expr.lhs.getattr("addr")
+                mv.visitStore(expr.rhs.getattr("val"), addr, 0)
+            else:
+                mv.visitAssignment(temp, expr.rhs.getattr("val"))
+            # 设置表达式 val
+            expr.setattr("val", temp)
 
     def visitIf(self, stmt: If, mv: FuncVisitor) -> None:
         stmt.cond.accept(self, mv)
@@ -261,6 +297,10 @@ class TACGen(Visitor[FuncVisitor, None]):
         # TODO: step2 完成负、反、非运算
         expr.operand.accept(self, mv)
 
+        if expr.operand.getattr("symbol") is not None and type(expr.operand.getattr("symbol").type) == ArrayType:
+            raise DecafTypeMismatchError()
+
+
         op = {
             node.UnaryOp.Neg: tacop.UnaryOp.NEG,        # -
             node.UnaryOp.BitNot: tacop.UnaryOp.NOT,     # ~
@@ -274,6 +314,9 @@ class TACGen(Visitor[FuncVisitor, None]):
         # TODO: step4-1 完成比较、逻辑与或运算
         expr.lhs.accept(self, mv)
         expr.rhs.accept(self, mv)
+
+        if expr.lhs.getattr("symbol") is not None and type(expr.lhs.getattr("symbol").type) == ArrayType:
+            raise DecafTypeMismatchError()
 
         op = {
             # 算术运算
@@ -325,3 +368,30 @@ class TACGen(Visitor[FuncVisitor, None]):
         
     def visitIntLiteral(self, expr: IntLiteral, mv: FuncVisitor) -> None:
         expr.setattr("val", mv.visitLoad(expr.value))
+
+    def visitIndexExpr(self, expr: IndexExpr, mv: FuncVisitor) -> None:
+        # TODO: step11-4 为数组索引表达式生成 TAC 代码
+        for child in expr.index.children:
+            child.accept(self, mv)
+        expr.base.accept(self, mv)
+        symbol = expr.base.getattr("symbol")
+        indexes = symbol.type.indexes
+        offset_list = []
+        offset_list.append(mv.visitLoad(4))
+        offset = 1
+        for i in range(len(indexes) - 1):
+            rank = len(indexes) - 1 - i
+            offset *= (indexes[rank] * 4)
+            offset_list.append(mv.visitLoad(offset))
+        offset_list = offset_list[::-1]
+        add_temp = mv.visitBinary(tacop.BinaryOp.MUL, offset_list[0], expr.index.children[0].getattr("val"))
+        for i in range(1, len(offset_list)):
+            new_add_temp = mv.visitBinary(tacop.BinaryOp.MUL, offset_list[i], expr.index.children[i].getattr("val"))
+            add_temp = mv.visitBinary(tacop.BinaryOp.ADD, add_temp, new_add_temp)
+        if symbol.isGlobal:
+            src = mv.visitLoadSymbol(expr.base.value)
+            addr = mv.visitBinary(tacop.BinaryOp.ADD, add_temp, src)
+        else:
+            addr = mv.visitBinary(tacop.BinaryOp.ADD, add_temp, symbol.temp)
+        expr.setattr("addr", addr)
+        expr.setattr("val", mv.visitLoadGlobalVar(addr, 0))

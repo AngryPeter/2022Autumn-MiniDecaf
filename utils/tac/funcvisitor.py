@@ -132,3 +132,8 @@ class FuncVisitor:
 
     def visitStore(self, data: Temp, addr: Temp, offset: int) -> None:
         self.func.add(Store(data, addr, offset))
+
+    def visitAlloc(self, size: int) -> Temp:
+        dst = self.freshTemp()
+        self.func.add(Alloc(dst, size))
+        return dst

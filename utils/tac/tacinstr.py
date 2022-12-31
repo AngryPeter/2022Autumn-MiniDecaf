@@ -275,7 +275,6 @@ class Load(TACInstr):
         v.visitLoad(self)
 
 
-
 class Store(TACInstr):
     def __init__(self, data: Temp, addr: Temp, offset: int) -> None:
         super().__init__(InstrKind.SEQ, [], [data, addr], None)
@@ -288,3 +287,16 @@ class Store(TACInstr):
 
     def accept(self, v: TACVisitor) -> None:
         v.visitStore(self)
+
+
+class Alloc(TACInstr):
+    def __init__(self, dst: Temp, size: int) -> None:
+        super().__init__(InstrKind.SEQ, [], [dst], None)
+        self.dst = dst      # 存储数组的首地址
+        self.size = size      # 数组的大小
+
+    def __str__(self) -> str:
+        return "%s = ALLOC %s" % (self.dst, self.size)
+
+    def accept(self, v: TACVisitor) -> None:
+        v.visitAlloc(self)

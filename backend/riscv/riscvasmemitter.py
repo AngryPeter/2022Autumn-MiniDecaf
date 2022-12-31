@@ -15,6 +15,7 @@ from ..subroutineinfo import SubroutineInfo
 from utils.tac import tacop
 from frontend.ast.tree import Declaration
 from frontend.ast.node import NULL
+from frontend.type.array import ArrayType
 """
 RiscvAsmEmitter: an AsmEmitter for RiscV
 """
@@ -31,6 +32,7 @@ class RiscvAsmEmitter(AsmEmitter):
         self.globals = globals
         self.bss = {}
         self.data = {}
+        self.sp_offset = 0  # 记录开数组时的 SP 偏移，在 exit 时恢复
 
     
         # the start of the asm code
@@ -46,13 +48,20 @@ class RiscvAsmEmitter(AsmEmitter):
             for key, value in self.bss.items():
                 self.printer.println(".globl " + key)
                 self.printer.println(key + ":")
-                self.printer.println("    " + ".space 4")
+                # TODO: step11-6 为全局数组分配空间
+                self.printer.println("    " + ".space " + str(value.var_t.type.size))
         if self.data:    # 生成 bss 段
             self.printer.println(".data")
             for key, value in self.data.items():
                 self.printer.println(".globl " + key)
                 self.printer.println(key + ":")
-                self.printer.println("    " + ".word " + str(value.init_expr.value))
+                if type(value.var_t.type) == ArrayType:
+                    for init_value in value.init_expr.values:
+                        self.printer.println("    " + ".word " + str(init_value.value))
+                    if len(value.init_expr.values) < value.var_t.type.length:
+                        self.printer.println("    " + ".zero " + str((value.var_t.type.length - len(value.init_expr.values)) * 4))
+                else:
+                    self.printer.println("    " + ".word " + str(value.init_expr.value))
         
         self.printer.println(".text")
         self.printer.println(".global main")
@@ -67,6 +76,8 @@ class RiscvAsmEmitter(AsmEmitter):
         )
         for instr in func.getInstrSeq():
             instr.accept(selector)
+            if type(instr) == Alloc:
+                self.sp_offset += instr.size
 
         info = SubroutineInfo(func.entry)
 
@@ -74,7 +85,7 @@ class RiscvAsmEmitter(AsmEmitter):
 
     # use info to construct a RiscvSubroutineEmitter
     def emitSubroutine(self, info: SubroutineInfo):
-        return RiscvSubroutineEmitter(self, info)
+        return RiscvSubroutineEmitter(self, info, self.sp_offset)
 
     # return all the string stored in asmcodeprinter
     def emitEnd(self):
@@ -166,16 +177,22 @@ class RiscvAsmEmitter(AsmEmitter):
             """获取全局变量的地址"""
             self.seq.append(Riscv.LoadSymbol(instr.dst, instr.symbol))
         # in step11, you need to think about how to store the array 
+
+        # TODO: step11-7 为数组分配地址空间 Alloc 对应的 riscv 指令生成
+        def visitAlloc(self, instr: Alloc) -> None:
+            """为数组分配地址空间"""
+            self.seq.append(Riscv.Move(instr.dst, Riscv.SP))
 """
 RiscvAsmEmitter: an SubroutineEmitter for RiscV
 """
 
 class RiscvSubroutineEmitter(SubroutineEmitter):
-    def __init__(self, emitter: RiscvAsmEmitter, info: SubroutineInfo) -> None:
+    def __init__(self, emitter: RiscvAsmEmitter, info: SubroutineInfo, sp_offset: int) -> None:
         super().__init__(emitter, info)
+        self.sp_offset = sp_offset
         
         # + 4 is for the RA reg 
-        self.nextLocalOffset = 4 * len(Riscv.CalleeSaved) + 4
+        self.nextLocalOffset = 4 * len(Riscv.CalleeSaved) + 4 + sp_offset
         
         # the buf which stored all the NativeInstrs in this function
         self.buf: list[NativeInstr] = []
@@ -240,11 +257,11 @@ class RiscvSubroutineEmitter(SubroutineEmitter):
         for i in range(len(Riscv.CalleeSaved)):
             if Riscv.CalleeSaved[i].isUsed():
                 self.printer.printInstr(
-                    Riscv.NativeStoreWord(Riscv.CalleeSaved[i], Riscv.SP, 4 * i)
+                    Riscv.NativeStoreWord(Riscv.CalleeSaved[i], Riscv.SP, 4 * i + self.sp_offset)
                 )
         # save RA
         self.printer.printInstr(
-            Riscv.NativeStoreWord(Riscv.RA, Riscv.SP, 4 * len(Riscv.CalleeSaved))
+            Riscv.NativeStoreWord(Riscv.RA, Riscv.SP, 4 * len(Riscv.CalleeSaved) + self.sp_offset)
         )
 
         self.printer.printComment("end of prologue")
@@ -270,11 +287,11 @@ class RiscvSubroutineEmitter(SubroutineEmitter):
         for i in range(len(Riscv.CalleeSaved)):
             if Riscv.CalleeSaved[i].isUsed():
                 self.printer.printInstr(
-                    Riscv.NativeLoadWord(Riscv.CalleeSaved[i], Riscv.SP, 4 * i)
+                    Riscv.NativeLoadWord(Riscv.CalleeSaved[i], Riscv.SP, 4 * i + self.sp_offset)
                 )
         # load RA
         self.printer.printInstr(
-                Riscv.NativeLoadWord(Riscv.RA, Riscv.SP, 4 * len(Riscv.CalleeSaved))
+                Riscv.NativeLoadWord(Riscv.RA, Riscv.SP, 4 * len(Riscv.CalleeSaved) + self.sp_offset)
             )
 
         self.printer.printInstr(Riscv.SPAdd(self.nextLocalOffset))
