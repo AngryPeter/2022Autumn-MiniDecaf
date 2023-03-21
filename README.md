@@ -1,4 +1,9 @@
-# MiniDecaf Python 框架
+# MiniDecaf Python
+
+## 补充
+
+- 2022秋编译原理实验
+- Stage5 - step11中的 `quicksort.c` 测例存在bug，待修
 
 ## 依赖
 
